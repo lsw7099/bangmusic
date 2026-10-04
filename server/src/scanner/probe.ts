@@ -132,8 +132,10 @@ export async function probe(ffprobe: string, file: string): Promise<ProbeResult>
   const durationS = Number(j.format.duration ?? audio.duration);
   if (!Number.isFinite(durationS) || durationS <= 0) throw new ProbeError('길이를 알 수 없음');
 
+  // 파일 전체 태그(MP3 ID3, FLAC Vorbis comment, MP4 ilst)가 먼저, 스트림 태그(Ogg·Opus는 여기에만 있음)는 빈 항목만 채운다.
+  // 스트림 태그를 먼저 보면, 태그를 고칠 때 옛 FFmpeg(6.1)가 스트림 쪽에 남긴 옛 제목이 이겼다(CI에서 발견).
   const tags: ProbeTags = {};
-  for (const src of [audio.tags ?? {}, j.format.tags ?? {}]) {
+  for (const src of [j.format.tags ?? {}, audio.tags ?? {}]) {
     for (const [k, v] of Object.entries(src)) {
       const key = TAG_KEYS[k.toLowerCase()] ?? (/^lyrics-/i.test(k) ? 'lyrics' : undefined);
       if (key && typeof v === 'string' && v.trim() && tags[key] === undefined) tags[key] = v.trim();

@@ -22,6 +22,13 @@ BangMusic 서버·앱 구현을 이어서 한다. 지금은 **P6(Proxmox 배포 
 - 앱 테스트 195개, 서버 테스트 149개 통과. 갤러리 88장(`flutter test --tags screenshots test/screenshots/gallery_test.dart`).
 - 최신 릴리스 APK 빌드됨(2026-10-04 18:14, `app/build/app/outputs/flutter-apk/app-release.apk`). 휴대폰이 adb offline(시리얼 없음)이라 **설치 못 함**.
 
+## 공개 저장소 (2026-10-04)
+
+- https://github.com/lsw7099/bangmusic (공개, MIT). 공개 기록은 커밋 1개(21827c0)부터 시작한다.
+- 그 전의 작업 기록 70여 커밋은 집 인프라 정보가 있어 **로컬 태그 `private-history-2026-10-04`로만** 남겼다. **태그를 push하지 않는다**(`git push --tags`·`--follow-tags` 금지).
+- 이 저장소의 git 이메일은 GitHub noreply로 설정했다(`git config user.email`). 커밋에 개인 이메일을 쓰지 않는다.
+- 문서에 실제 IP·도메인·키 이름·기기 일련번호를 쓰지 않는다. 실제 값은 `.local/infra.md`.
+
 ## 실서버 (L2)
 
 **저장소는 공개용이라 아래 주소·도메인·키 이름은 예시값이다(192.168.1.x, example.com). 실제 값은 `.local/infra.md`(git 제외)에 있다.**
