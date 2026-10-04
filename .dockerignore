@@ -1,0 +1,9 @@
+# 이미지에는 서버 실행에 필요한 것만 (deploy/docker/Dockerfile)
+*
+!package.json
+!package-lock.json
+!LICENSE
+!server/package.json
+!server/src/**
+!deploy/docker/**
+server/src/**/*.test.ts

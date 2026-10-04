@@ -1,0 +1,24 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# 합성 음원은 언제든 다시 생성한다 (실제 음원을 저장소에 넣지 않는다)
+fixtures/
+
+# 비밀값
+.env
+secrets/
+
+
+# Flutter / Dart
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+packages/bangmusic_api/.dart_tool/
+packages/bangmusic_api/build/
+
+# 로컬 시험용 서버 데이터
+.tmp-*/
+.local/

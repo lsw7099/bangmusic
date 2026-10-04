@@ -1,0 +1,70 @@
+# BangMusic P1 curl 세션 (2026-10-02T11:33:39Z, 127.0.0.1, 합성 음원 lib1)
+
+$ curl -s http://127.0.0.1:18080/v1/server
+{"server_id":"srv_01M3Y614TH8XMDTMK7CKM33C26","name":"P1 로컬 시험","product":"bangmusic-server","version":"0.1.0","api":{"major":1,"minor":0},"min_client_api_minor":0,"features":["change_feed"],"transcode_profiles":[],"limits":{"max_page_size":200,"max_history_batch":500,"max_cover_bytes":5242880},"setup_required":false}
+
+$ curl -s -X POST http://127.0.0.1:18080/v1/auth/login -d {"username":"siwon","password":"<redacted>",...}
+{"session_id":"ses_01M3Y68BX3DTHR1V3VA779J1YM","access_token":"<redacted>","access_expires_at":"2026-10-02T12:33:39Z","refresh_token":"<redacted>","refresh_expires_at":"2026-12-31T11:33:39Z","user":{"id":"usr_01M3Y614TK2R88JJMS50Z4Z2B0","username":"siwon","role":"admin"}}
+
+$ curl -s http://127.0.0.1:18080/v1/search?q=%EF%BE%96%EF%BD%B1%EF%BD%B9&types=track&limit=1 # q=ﾖｱｹ (반각 가타카나)
+{"query_normalized":"よあけ","tracks":{"items":[{"id":"trk_01M3Y616ZXFGW3MYK6W2X37XMG","title":"夜明けのうた","title_sort":"よあけのうた","artists":[{"id":"art_01M3Y616ZW2G4DX86M9HMCV61W","name":"テスト楽団"}],"album":{"id":"alb_01M3Y616ZWZ7J5SA7K51E9XCTB","title":"合成アルバム"},"disc_no":null,"track_no":3,"duration_ms":60000,"year":2026,"genre":"J-Pop","artwork_id":"img_01M3Y616ZWX60NGZ036D10XDFS","media_version":"23xsp2fc23ak4g1c","source_format":{"container":"flac","codec":"flac","sample_rate":44100,"channels":2,"bit_depth":16,"bitrate":151841},"state":"available","has_lyrics":[],"updated_at":"2026-10-02T11:29:44Z"}],"next_cursor":null}}
+
+$ curl -s -X POST http://127.0.0.1:18080/v1/tracks/trk_01M3Y616ZXFGW3MYK6W2X37XMG/renditions -d {"purpose":"stream","quality":"original","accept":[{"container":"flac","codec":"flac"}]}
+{"id":"rnd_01M3Y67E07TWQPQG1BMD7RQT1W","track_id":"trk_01M3Y616ZXFGW3MYK6W2X37XMG","media_version":"23xsp2fc23ak4g1c","profile":"original","state":"ready","mime":"audio/flac","container":"flac","codec":"flac","error_code":null,"size_bytes":1138808,"duration_ms":60000,"sha256":"d275a16ddf84813130b153af11cdcfa2664daebe0672ffacacd2dce0ade6d41a","etag":"\"23xsp2fc23ak4g1c-original\"","seekable":true,"media_url":"/v1/media/rnd_01M3Y67E07TWQPQG1BMD7RQT1W?mt=<redacted>","ticket_expires_at":"2026-10-02T23:33:39Z","retry_after_s":null}
+
+$ curl -sI http://127.0.0.1:18080/v1/media/...?mt=<ticket>
+HTTP/1.1 200 OK
+x-request-id: req_r6pu2tug
+accept-ranges: bytes
+etag: "23xsp2fc23ak4g1c-original"
+content-type: audio/flac
+cache-control: private, no-transform, max-age=31536000, immutable
+x-content-duration-ms: 60000
+content-length: 1138808
+Date: Fri, 02 Oct 2026 11:33:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+
+$ curl -s -H Range: bytes=1048576-1049599 -o part.bin -D - http://127.0.0.1:18080/v1/media/...?mt=<ticket>
+HTTP/1.1 206 Partial Content
+x-request-id: req_0UOr1yb6
+accept-ranges: bytes
+etag: "23xsp2fc23ak4g1c-original"
+content-type: audio/flac
+cache-control: private, no-transform, max-age=31536000, immutable
+x-content-duration-ms: 60000
+content-range: bytes 1048576-1049599/1138808
+content-length: 1024
+Date: Fri, 02 Oct 2026 11:33:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+
+$ curl -s -H Range: bytes=999999999- http://127.0.0.1:18080/v1/media/...?mt=<ticket>
+HTTP/1.1 416 Range Not Satisfiable
+x-request-id: req_Hk9Pky4k
+content-range: bytes */1138808
+accept-ranges: bytes
+content-type: application/problem+json; charset=utf-8
+content-length: 212
+Date: Fri, 02 Oct 2026 11:33:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"type":"about:blank","title":"Range Not Satisfiable","status":416,"code":"range_not_satisfiable","detail":"요청한 범위가 파일 길이를 벗어났습니다.","request_id":"req_Hk9Pky4k","retryable":false}
+
+$ curl -s http://127.0.0.1:18080/v1/media/...?mt=<변조된 ticket>
+{"type":"about:blank","title":"Unauthorized","status":401,"code":"ticket_invalid","detail":"미디어 티켓이 올바르지 않습니다.","request_id":"req_DDlO_ZOM","retryable":true}
+
+$ curl -s http://127.0.0.1:18080/v1/admin/libraries # 관리자: 라이브러리 상태 (경로 없음)
+{"items":[{"id":"lib_01M3Y61543RTKX8NVPJZQDN55T","name":"Lib One","status":"online","track_count":27,"missing_count":0,"last_scan_at":"2026-10-02T11:29:45Z","pending_review":false}]}
+
+$ curl -s -X POST http://127.0.0.1:18080/v1/auth/logout
+204
+
+$ curl -s http://127.0.0.1:18080/v1/me # 로그아웃 후
+{"type":"about:blank","title":"Unauthorized","status":401,"code":"session_revoked","detail":"세션이 취소되었습니다. 다시 로그인하세요.","request_id":"req_ZYgUBxD-","retryable":false}
+
+$ curl -s http://127.0.0.1:18080/v1/media/...?mt=<로그아웃 전 ticket> # 세션 폐기 → 티켓도 무효
+{"type":"about:blank","title":"Unauthorized","status":401,"code":"session_revoked","detail":"세션이 취소되었습니다. 다시 로그인하세요.","request_id":"req_2wyAHjhG","retryable":false}

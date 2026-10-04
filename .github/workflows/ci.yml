@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: OpenAPI 린트 · 코드 생성 일치
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: npm ci
+      - name: OpenAPI 린트
+        run: npm run lint:openapi
+      - name: 서버 타입·스키마, Dart 클라이언트 생성
+        run: npm run gen
+      - name: 생성 결과가 커밋된 것과 같은지 확인
+        run: |
+          git add -N .
+          git diff --exit-code -- server/src/generated packages/bangmusic_api \
+            || { echo "::error::openapi.yaml을 고친 뒤 npm run gen 결과를 커밋하지 않았다"; exit 1; }
+      - name: 서버 생성 타입 컴파일
+        run: npm run typecheck --workspace server
+      - name: Dart 클라이언트 분석
+        working-directory: packages/bangmusic_api
+        # 생성 코드의 unused_import 경고는 고칠 수 없으므로 오류만 실패로 본다.
+        run: dart analyze --no-fatal-warnings lib
+
+  fixtures:
+    name: 합성 음원 생성
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: FFmpeg 설치
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: 합성 음원 세트 (60분 음원 제외)
+        run: node tools/make-fixtures/make-fixtures.mjs --quick
+      - name: 결과 요약
+        run: |
+          node -e "const m=require('./fixtures/manifest.json');console.log(m.ffmpeg);console.log('files',m.files.length,'skipped',JSON.stringify(m.skipped))"
+
+  server:
+    name: 서버 테스트 (계약·SEC·FN, L1)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: FFmpeg 설치
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - name: 합성 음원
+        run: node tools/make-fixtures/make-fixtures.mjs --quick
+      - name: 타입 검사
+        run: npm run typecheck --workspace server
+      - name: 테스트
+        run: npm test --workspace server

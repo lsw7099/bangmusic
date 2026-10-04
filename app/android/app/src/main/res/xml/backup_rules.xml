@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 이하 자동 백업: data_extraction_rules.xml과 같은 제외 (03장 §5.7) -->
+<full-backup-content>
+    <exclude domain="file" path="profiles/"/>
+    <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+</full-backup-content>

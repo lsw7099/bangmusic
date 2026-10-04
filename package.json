@@ -1,0 +1,26 @@
+{
+  "name": "bangmusic",
+  "private": true,
+  "license": "MIT",
+  "description": "BangMusic 자가호스팅 서버 · 모바일 앱 저장소 (P0 골격)",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "server"
+  ],
+  "scripts": {
+    "lint:openapi": "redocly lint docs/design/openapi.yaml --format=stylish",
+    "gen:server": "openapi-typescript docs/design/openapi.yaml -o server/src/generated/api.d.ts && node tools/codegen/extract-schemas.mjs",
+    "gen:dart": "node tools/codegen/gen-dart.mjs",
+    "gen": "npm run gen:server && npm run gen:dart",
+    "fixtures": "node tools/make-fixtures/make-fixtures.mjs",
+    "doctor": "node tools/doctor.mjs"
+  },
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "^2.20.0",
+    "@redocly/cli": "^2.0.0",
+    "openapi-typescript": "^7.8.0",
+    "yaml": "^2.9.1"
+  }
+}

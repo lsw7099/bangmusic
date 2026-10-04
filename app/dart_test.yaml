@@ -1,0 +1,8 @@
+# integration: 실제 로컬 서버(tools/e2e/app-test-server.mts)를 띄우는 L1 테스트. Node 24와 FFmpeg가 필요하다.
+# screenshots: 화면×상태 갤러리(docs/status/evidence/p5-gallery)를 다시 만든다. Noto Sans KR 글꼴(Windows)이 필요하다.
+# 평소: flutter test --exclude-tags integration,screenshots
+tags:
+  integration:
+    timeout: 4x
+  screenshots:
+    timeout: 8x

@@ -1,0 +1,6 @@
+# OpenAPI 린트 설정. 규칙을 끄거나 낮출 때는 이유를 주석으로 남긴다.
+extends:
+  - recommended
+rules:
+  # 공개 계약이므로 모든 동작에 4xx 응답 정의를 요구한다.
+  operation-4xx-response: error

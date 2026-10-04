@@ -1,0 +1,4 @@
+#!/bin/sh
+# 관리 명령은 서비스 사용자로 실행한다: runuser -u bangmusic -- bangmusic-server <명령>
+set -a; . /etc/bangmusic/env; set +a
+exec /usr/local/bin/node /opt/bangmusic/current/server/src/main.ts "$@"

@@ -1,0 +1,1858 @@
+openapi: 3.1.0
+info:
+  title: BangMusic Server API
+  version: 1.0.0
+  summary: 자가호스팅 BangMusic 음악 서버와 모바일 앱 사이의 계약
+  description: |
+    설계 초안(2026-10-02). 구현 전 계약이며 동작하는 서버가 아직 없다.
+
+    공통 규칙
+    - 모든 경로는 `/v1` 아래에 있다. 호환되지 않는 변경은 `/v2`로만 낸다.
+    - `/v1` 안에서는 추가만 한다(새 필드·새 엔드포인트·새 enum 값). 앱은 모르는 필드와 enum 값을 무시해야 한다.
+    - 서버가 무엇을 지원하는지는 `GET /v1/server`의 `api.minor`와 `features`로 판단한다.
+    - 오류는 RFC 9457 `application/problem+json`이며 기계 판독용 `code`를 포함한다.
+    - 응답에는 서버의 파일 경로가 절대 포함되지 않는다. 모든 자원은 불투명 ID로만 가리킨다.
+    - 시간은 RFC 3339 UTC 문자열, 길이는 밀리초 정수다.
+    - 권한이 없는 자원은 존재 여부를 숨기기 위해 404 `not_found`로 응답한다. 403은 역할이 부족한 관리 API에만 쓴다.
+    - 모든 응답에 `X-Request-Id`가 있다. 앱은 오류 보고에 이 값을 표시한다.
+    - 모든 동작은 `426 client_too_old`(앱 API minor가 서버 최소값보다 낮음)와 `503`(`setup_required`, `maintenance` 등)을 돌려줄 수 있다.
+  license:
+    name: 미정 (서버 패키지 라이선스는 제품 소유자 결정 사항)
+    identifier: LicenseRef-TBD
+servers:
+  - url: https://{host}/v1
+    description: 구매자가 운영하는 서버. 앱은 사용자가 입력한 주소를 사용한다.
+    variables:
+      host:
+        default: music.example.net
+tags:
+  - name: server
+    description: 서버 식별과 기능 확인 (인증 불필요)
+  - name: auth
+    description: 로그인, 토큰 갱신, 세션 취소
+  - name: me
+    description: 본인 계정
+  - name: catalog
+    description: 곡·앨범·아티스트·검색·변경 피드
+  - name: artwork
+    description: 앨범·플레이리스트 표지와 썸네일
+  - name: lyrics
+    description: 동기/비동기 가사, 발음·번역 가사
+  - name: playlists
+    description: 플레이리스트와 항목 (버전 기반 충돌 처리)
+  - name: media
+    description: 렌디션 결정, 스트리밍, 다운로드
+  - name: history
+    description: 재생 기록 (멱등 전송)
+  - name: admin
+    description: 관리자 전용
+security:
+  - bearerAuth: []
+
+paths:
+  /server:
+    get:
+      tags: [server]
+      operationId: getServerInfo
+      summary: 서버 식별자·API 버전·기능 목록
+      description: |
+        앱이 서버 주소를 등록할 때와 앱 시작 시마다 호출한다. 인증 없이 호출 가능하며
+        라이브러리 내용이나 사용자 정보는 포함하지 않는다.
+      security: []
+      responses:
+        '200':
+          description: 서버 정보
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerInfo' }
+              example:
+                server_id: srv_01JB2M4X7Q9ZK3V5T8N6R1WY0E
+                name: 우리집 음악
+                product: bangmusic-server
+                version: 1.0.0
+                api: { major: 1, minor: 0 }
+                min_client_api_minor: 0
+                features: [transcode, lyrics, playlist_covers, history, change_feed]
+                transcode_profiles: [aac_256, aac_128]
+                limits: { max_page_size: 200, max_history_batch: 500, max_cover_bytes: 5242880 }
+                setup_required: false
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: 사용자 이름과 비밀번호로 기기 세션 생성
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            example:
+              username: siwon
+              password: correct horse battery staple
+              device: { name: Galaxy S25, platform: android, app_version: 1.0.0, installation_id: 6f1c2f0e-3b1d-4c55-9a44-0d2d0a6d7c11 }
+      responses:
+        '200':
+          description: 세션 생성됨
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+              example:
+                session_id: ses_01JB2N0A7M2Q4X6Z8C0E2G4J6L
+                access_token: bma_3q2-9fJx...redacted
+                access_expires_at: '2026-10-02T04:00:00Z'
+                refresh_token: bmr_Yt7-1LkP...redacted
+                refresh_expires_at: '2026-12-31T03:00:00Z'
+                user: { id: usr_01JB2M9S0T2V4X6Z8B0D2F4H6K, username: siwon, display_name: 시원, role: admin }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: 자격 증명이 틀림 (`invalid_credentials`). 사용자 존재 여부를 구분하지 않는다.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example: { type: 'about:blank', title: Unauthorized, status: 401, code: invalid_credentials, detail: 사용자 이름 또는 비밀번호가 올바르지 않습니다., request_id: req_7Hq2 }
+        '403':
+          description: 계정이 비활성화됨 (`account_disabled`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshToken
+      summary: 리프레시 토큰을 회전시키고 새 토큰 쌍을 발급
+      description: |
+        리프레시 토큰은 1회용이다. 직전 토큰은 네트워크 실패 후 재시도를 위해 60초 동안만 다시 받아 주며,
+        이때 같은 새 토큰 쌍을 돌려준다. 그 이후에 옛 토큰이 다시 쓰이면 탈취로 보고 세션 전체를 폐기한다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: 새 토큰 쌍
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: |
+            `refresh_expired`(만료), `session_revoked`(관리자·사용자가 취소 또는 재사용 감지),
+            `account_disabled`. 재시도해도 성공하지 않으므로 앱은 재로그인을 요구한다.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: 현재 세션 폐기
+      description: 액세스·리프레시 토큰과 이 세션의 미디어 티켓이 즉시 무효가 된다. 이미 폐기된 세션에도 204를 준다(멱등).
+      responses:
+        '204': { description: 폐기됨 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /sessions:
+    get:
+      tags: [auth]
+      operationId: listSessions
+      summary: 내 기기 세션 목록
+      responses:
+        '200':
+          description: 세션 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /sessions/{sessionId}:
+    delete:
+      tags: [auth]
+      operationId: revokeSession
+      summary: 내 다른 기기의 세션 취소
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: 취소됨 (멱등) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /me:
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: 본인 정보와 접근 가능한 라이브러리
+      responses:
+        '200':
+          description: 본인 정보
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [me]
+      operationId: deleteMe
+      summary: 본인 계정과 개인 데이터 삭제
+      description: |
+        플레이리스트, 재생 기록, 가사 보정, 세션을 삭제한다. 음악 원본은 건드리지 않는다.
+        마지막 관리자 계정은 삭제할 수 없다(409 `last_admin`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        '204': { description: 삭제됨 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /me/password:
+    put:
+      tags: [me]
+      operationId: changePassword
+      summary: 비밀번호 변경 (다른 모든 세션 폐기)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 10, maxLength: 256 }
+      responses:
+        '204': { description: 변경됨 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /me/export:
+    get:
+      tags: [me]
+      operationId: exportMe
+      summary: 본인 데이터 내보내기 (플레이리스트·재생 기록 JSON)
+      responses:
+        '200':
+          description: 내보내기 문서
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /home:
+    get:
+      tags: [catalog]
+      operationId: getHome
+      summary: 홈 화면용 묶음 (플레이리스트, 최근 들은 곡, 많이 들은 곡, 최근 추가)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: 홈 구획
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Home' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /tracks:
+    get:
+      tags: [catalog]
+      operationId: listTracks
+      summary: 곡 목록
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: sort, in: query, schema: { type: string, enum: [title, added_at_desc, album], default: title } }
+        - { name: album_id, in: query, schema: { type: string } }
+        - { name: artist_id, in: query, schema: { type: string } }
+        - { name: library_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: 곡 페이지
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /tracks/{trackId}:
+    get:
+      tags: [catalog]
+      operationId: getTrack
+      summary: 곡 상세 조회
+      parameters:
+        - { $ref: '#/components/parameters/TrackId' }
+      responses:
+        '200':
+          description: 곡
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Track' }
+              example:
+                id: trk_01JB2P3C5E7G9J1L3N5Q7S9U1W
+                title: 夜明けのうた
+                title_sort: よあけのうた
+                artists: [{ id: art_01JB2P1A3C5E7G9J1L3N5Q7S9U, name: テスト楽団 }]
+                album: { id: alb_01JB2P2B4D6F8H0K2M4P6R8T0V, title: 合成アルバム }
+                disc_no: 1
+                track_no: 3
+                duration_ms: 215340
+                year: 2024
+                artwork_id: img_01JB2P0Z2B4D6F8H0K2M4P6R8T
+                media_version: k7q2m9x4b1c8d5f0
+                source_format: { container: flac, codec: flac, sample_rate: 44100, channels: 2, bit_depth: 16, bitrate: 912000 }
+                state: available
+                has_lyrics: [original, pronunciation_ko, translation_ko]
+                updated_at: '2026-09-28T11:02:13Z'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /albums:
+    get:
+      tags: [catalog]
+      operationId: listAlbums
+      summary: 앨범 목록 (커서 페이지네이션)
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: sort, in: query, schema: { type: string, enum: [title, added_at_desc, year_desc], default: title } }
+        - { name: artist_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: 앨범 페이지
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /albums/{albumId}:
+    get:
+      tags: [catalog]
+      operationId: getAlbum
+      summary: 앨범과 수록곡 (디스크·트랙 순)
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 앨범 상세
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /artists:
+    get:
+      tags: [catalog]
+      operationId: listArtists
+      summary: 아티스트 목록 (커서 페이지네이션)
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: 아티스트 페이지
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtistPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /artists/{artistId}:
+    get:
+      tags: [catalog]
+      operationId: getArtist
+      summary: 아티스트 상세와 앨범 목록
+      parameters:
+        - { name: artistId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 아티스트
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /search:
+    get:
+      tags: [catalog]
+      operationId: search
+      summary: 곡·앨범·아티스트·내 플레이리스트 통합 검색
+      description: |
+        질의어는 서버에서 NFKC·소문자·가나 통일로 정규화된다. `types`를 하나만 주면 `cursor`로
+        다음 페이지를 받을 수 있다. 여러 유형이면 유형별 상위 `limit`개만 돌려준다.
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - name: types
+          in: query
+          description: 쉼표로 구분. 기본은 전부.
+          schema: { type: string, examples: ['track,album'] }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: 검색 결과
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /changes:
+    get:
+      tags: [catalog]
+      operationId: getChanges
+      summary: 증분 동기화용 변경 피드
+      parameters:
+        - name: since
+          in: query
+          required: true
+          description: 이전 응답의 `next_since`. 최초 동기화는 `0`.
+          schema: { type: string }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: 변경 묶음
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeBatch' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '410':
+          description: '`sync_token_expired` — `since`가 보존 기간보다 오래됨. 앱은 전체 재동기화한다.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /artwork/{artworkId}:
+    get:
+      tags: [artwork]
+      operationId: getArtwork
+      summary: 표지 이미지
+      description: |
+        `artwork_id`는 내용이 바뀌면 새 ID가 되므로 응답은 불변으로 캐시할 수 있다.
+        `Authorization` 헤더 또는 `mt` 미디어 티켓으로 인증한다.
+      security:
+        - bearerAuth: []
+        - mediaTicket: []
+      parameters:
+        - { name: artworkId, in: path, required: true, schema: { type: string } }
+        - name: size
+          in: query
+          description: 긴 변의 픽셀 수. 서버가 가장 가까운 준비된 크기로 내린다.
+          schema: { type: integer, enum: [96, 256, 512, 1024], default: 512 }
+      responses:
+        '200':
+          description: 이미지
+          headers:
+            ETag: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, examples: ['private, max-age=31536000, immutable'] } }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '304': { description: 변경 없음 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /tracks/{trackId}/lyrics:
+    get:
+      tags: [lyrics]
+      operationId: getLyrics
+      summary: 원문·한글 발음·한국어 번역 가사
+      parameters:
+        - { $ref: '#/components/parameters/TrackId' }
+      responses:
+        '200':
+          description: 가사 묶음. 가사가 하나도 없으면 `variants`가 빈 배열이다(404가 아님).
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Lyrics' }
+              example:
+                track_id: trk_01JB2P3C5E7G9J1L3N5Q7S9U1W
+                version: 3
+                offset_ms: -250
+                variants:
+                  - kind: original
+                    language: ja
+                    synced: true
+                    source: { type: sidecar, name: 서버의 .lrc 파일 }
+                    lines: [{ t_ms: 12300, text: 夜が明ける }, { t_ms: 17850, text: 空が染まる }]
+                  - kind: pronunciation_ko
+                    language: ko
+                    synced: true
+                    source: { type: user, name: 사용자 입력 }
+                    lines: [{ t_ms: 12300, text: 요루가 아케루 }, { t_ms: 17850, text: 소라가 소마루 }]
+                  - kind: translation_ko
+                    language: ko
+                    synced: true
+                    source: { type: user, name: 사용자 입력 }
+                    lines: [{ t_ms: 12300, text: 밤이 밝아 온다 }, { t_ms: 17850, text: 하늘이 물든다 }]
+        '304': { description: 변경 없음 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /tracks/{trackId}/lyrics/{kind}:
+    put:
+      tags: [lyrics]
+      operationId: putLyricsVariant
+      summary: 가사 한 종류를 직접 입력/교체 (관리자)
+      description: 일반 사용자는 403. 본문은 LRC 또는 일반 텍스트이며 서버가 파싱해 저장한다.
+      parameters:
+        - { $ref: '#/components/parameters/TrackId' }
+        - { name: kind, in: path, required: true, schema: { $ref: '#/components/schemas/LyricsKind' } }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [format, body]
+              properties:
+                format: { type: string, enum: [lrc, plain] }
+                language: { type: string }
+                body: { type: string, maxLength: 200000 }
+                source_name: { type: string }
+                license_note: { type: string }
+      responses:
+        '200':
+          description: 저장됨
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Lyrics' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /tracks/{trackId}/lyrics/offset:
+    put:
+      tags: [lyrics]
+      operationId: putLyricsOffset
+      summary: 사용자별 가사 동기화 보정값 저장
+      parameters:
+        - { $ref: '#/components/parameters/TrackId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offset_ms]
+              properties:
+                offset_ms: { type: integer, minimum: -10000, maximum: 10000 }
+      responses:
+        '204': { description: 저장됨 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /playlists:
+    get:
+      tags: [playlists]
+      operationId: listPlaylists
+      summary: 내 플레이리스트
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: 플레이리스트 페이지
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaylistPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [playlists]
+      operationId: createPlaylist
+      summary: 플레이리스트 생성 (멱등 키)
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                description: { type: string, maxLength: 2000 }
+                track_ids: { type: array, maxItems: 5000, items: { type: string } }
+      responses:
+        '201':
+          description: 생성됨
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /playlists/{playlistId}:
+    parameters:
+      - { $ref: '#/components/parameters/PlaylistId' }
+    get:
+      tags: [playlists]
+      operationId: getPlaylist
+      summary: 플레이리스트 메타데이터 조회
+      responses:
+        '200':
+          description: 플레이리스트 (항목 제외)
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      tags: [playlists]
+      operationId: updatePlaylist
+      summary: 이름·설명 수정
+      parameters:
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                description: { type: string, maxLength: 2000 }
+      responses:
+        '200':
+          description: 수정됨
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [playlists]
+      operationId: deletePlaylist
+      summary: 플레이리스트 삭제 (멱등)
+      responses:
+        '204': { description: 삭제됨 (멱등) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /playlists/{playlistId}/items:
+    parameters:
+      - { $ref: '#/components/parameters/PlaylistId' }
+    get:
+      tags: [playlists]
+      operationId: listPlaylistItems
+      summary: 플레이리스트 항목 목록
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: 순서대로 정렬된 항목
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaylistItemPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /playlists/{playlistId}/edits:
+    post:
+      tags: [playlists]
+      operationId: editPlaylist
+      summary: 항목 추가·삭제·이동을 한 번에 적용
+      description: |
+        `If-Match`의 버전이 현재와 같을 때만 전체 연산이 원자적으로 적용된다.
+        다르면 412 `version_conflict`와 현재 ETag를 돌려주며, 앱은 최신 상태를 받아 연산을 다시 계산한다.
+      parameters:
+        - { $ref: '#/components/parameters/PlaylistId' }
+        - { $ref: '#/components/parameters/IfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaylistEdit' }
+            example:
+              ops:
+                - { op: add, track_ids: [trk_01JB2P3C5E7G9J1L3N5Q7S9U1W], after_item_id: null }
+                - { op: move, item_id: pli_01JB2Q5E7G9J1L3N5Q7S9U1W3Y, after_item_id: pli_01JB2Q4D6F8H0K2M4P6R8T0V2X }
+                - { op: remove, item_ids: [pli_01JB2Q6F8H0K2M4P6R8T0V2X4Z] }
+      responses:
+        '200':
+          description: 적용됨
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /playlists/{playlistId}/cover:
+    parameters:
+      - { $ref: '#/components/parameters/PlaylistId' }
+    put:
+      tags: [playlists]
+      operationId: putPlaylistCover
+      summary: 플레이리스트 표지 업로드
+      description: 서버가 디코딩 후 다시 인코딩하고 메타데이터(EXIF)를 제거한다.
+      parameters:
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        '200':
+          description: 저장됨
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Playlist' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413':
+          description: '`payload_too_large` — `limits.max_cover_bytes` 초과'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '415':
+          description: '`unsupported_media_type`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [playlists]
+      operationId: deletePlaylistCover
+      summary: 표지 제거 (곡 표지 모자이크로 돌아감)
+      responses:
+        '204': { description: 제거됨 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /tracks/{trackId}/renditions:
+    post:
+      tags: [media]
+      operationId: resolveRendition
+      summary: 이 기기에서 재생/다운로드할 제공 형식 결정
+      description: |
+        앱이 재생 가능한 형식과 원하는 품질을 보내면 서버가 원본 제공 또는 변환을 결정한다.
+        - 원본을 그대로 줄 수 있거나 변환본이 캐시에 있으면 200과 `state=ready`.
+        - 변환이 필요하면 작업을 대기열에 넣고 202와 `state=preparing`, `Retry-After`.
+          앱은 `GET /renditions/{id}`를 폴링한다.
+        같은 요청을 반복해도 같은 렌디션이 나온다(멱등). 응답의 `media_url`은 서버 기준 상대 경로이며
+        `mt` 미디어 티켓이 포함되어 있어 플레이어·다운로더가 헤더 없이 요청할 수 있다.
+      parameters:
+        - { $ref: '#/components/parameters/TrackId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenditionRequest' }
+            example:
+              purpose: stream
+              quality: original
+              accept: [{ container: flac, codec: flac }, { container: mp3, codec: mp3 }, { container: m4a, codec: aac }, { container: ogg, codec: opus }, { container: ogg, codec: vorbis }]
+      responses:
+        '200':
+          description: 바로 사용 가능
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rendition' }
+              example:
+                id: rnd_01JB2R7G9J1L3N5Q7S9U1W3Y5A
+                track_id: trk_01JB2P3C5E7G9J1L3N5Q7S9U1W
+                media_version: k7q2m9x4b1c8d5f0
+                profile: original
+                state: ready
+                mime: audio/flac
+                container: flac
+                codec: flac
+                size_bytes: 24561892
+                duration_ms: 215340
+                sha256: 9f2c1e0d6b7a48c3a5d4e1f09b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c
+                etag: '"k7q2m9x4b1c8d5f0-original"'
+                seekable: true
+                media_url: /v1/media/rnd_01JB2R7G9J1L3N5Q7S9U1W3Y5A?mt=eyJ2IjoxLC...redacted
+                ticket_expires_at: '2026-10-02T15:00:00Z'
+        '202':
+          description: 변환 준비 중
+          headers:
+            Retry-After: { schema: { type: integer }, description: 다음 폴링까지 권장 초 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rendition' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: '`not_found`(곡 없음/권한 없음) 또는 `media_missing`(곡은 있으나 원본 파일이 사라짐)'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: '`no_playable_format` — 앱이 받을 수 있는 형식이 없고 서버 변환도 꺼져 있음'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429':
+          description: '`transcode_queue_full` — 변환 대기열 한도 초과. `Retry-After` 후 재시도.'
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+
+  /renditions/{renditionId}:
+    get:
+      tags: [media]
+      operationId: getRendition
+      summary: 렌디션 상태 조회 및 미디어 티켓 재발급
+      description: |
+        `preparing` 상태 폴링과, 티켓이 만료된 뒤 새 `media_url`을 받는 데 쓴다.
+        원본이 바뀌어 이 렌디션이 더 이상 유효하지 않으면 410 `rendition_superseded`.
+      parameters:
+        - { $ref: '#/components/parameters/RenditionId' }
+      responses:
+        '200':
+          description: 렌디션 (`state`는 `ready`, `preparing`, `failed` 중 하나)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rendition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /media/{renditionId}:
+    parameters:
+      - { $ref: '#/components/parameters/RenditionId' }
+    get:
+      tags: [media]
+      operationId: getMedia
+      summary: 오디오 바이트 (스트리밍과 다운로드 공용)
+      description: |
+        렌디션은 불변이다. 같은 ID는 항상 같은 바이트를 가리키며, 원본이 바뀌면 410이 된다.
+        따라서 이어받기에서 옛 바이트와 새 바이트가 섞일 수 없다.
+        단일 범위의 `Range`만 지원한다. 여러 범위를 요청하면 전체(200)를 돌려준다.
+      security:
+        - bearerAuth: []
+        - mediaTicket: []
+      parameters:
+        - name: Range
+          in: header
+          schema: { type: string, examples: ['bytes=1048576-'] }
+        - name: If-Range
+          in: header
+          description: 렌디션의 ETag. 일치하지 않으면 200 전체 응답.
+          schema: { type: string }
+      responses:
+        '200':
+          description: 전체 본문
+          headers:
+            Accept-Ranges: { schema: { type: string, const: bytes } }
+            Content-Length: { schema: { type: integer } }
+            ETag: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, examples: ['private, no-transform, max-age=31536000, immutable'] } }
+            X-Content-Duration-Ms: { schema: { type: integer } }
+          content:
+            audio/*: { schema: { type: string, format: binary } }
+        '206':
+          description: 부분 본문
+          headers:
+            Accept-Ranges: { schema: { type: string, const: bytes } }
+            Content-Range: { schema: { type: string, examples: ['bytes 1048576-24561891/24561892'] } }
+            Content-Length: { schema: { type: integer } }
+            ETag: { schema: { type: string } }
+          content:
+            audio/*: { schema: { type: string, format: binary } }
+        '401':
+          description: '`ticket_expired`, `ticket_invalid`, `access_expired`, `session_revoked` 중 하나'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`rendition_not_ready` — 아직 변환 중'
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '416':
+          description: '`range_not_satisfiable`'
+          headers:
+            Content-Range: { schema: { type: string, examples: ['bytes */24561892'] } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+    head:
+      tags: [media]
+      operationId: headMedia
+      summary: 길이·MIME·ETag 확인 (본문 없음)
+      security:
+        - bearerAuth: []
+        - mediaTicket: []
+      responses:
+        '200':
+          description: GET과 같은 헤더
+          headers:
+            Accept-Ranges: { schema: { type: string, const: bytes } }
+            Content-Length: { schema: { type: integer } }
+            Content-Type: { schema: { type: string } }
+            ETag: { schema: { type: string } }
+            X-Content-Duration-Ms: { schema: { type: integer } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /history/events:
+    post:
+      tags: [history]
+      operationId: postPlayEvents
+      summary: 재생 기록 일괄 전송 (오프라인 기록 재동기화 포함)
+      description: |
+        각 이벤트의 `event_id`는 앱이 만든 UUID다. 이미 받은 `event_id`는 무시하고 `duplicates`에 센다.
+        따라서 응답을 못 받았을 때 같은 묶음을 그대로 다시 보내도 안전하다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items: { $ref: '#/components/schemas/PlayEvent' }
+      responses:
+        '200':
+          description: 처리 결과
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, duplicates, rejected]
+                properties:
+                  accepted: { type: integer }
+                  duplicates: { type: integer }
+                  rejected:
+                    type: array
+                    description: 곡이 없거나 권한이 없어 버린 이벤트. 앱은 재전송하지 않는다.
+                    items:
+                      type: object
+                      required: [event_id, code]
+                      properties:
+                        event_id: { type: string, format: uuid }
+                        code: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /history/recent:
+    get:
+      tags: [history]
+      operationId: getRecentTracks
+      summary: 최근 재생한 곡
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: 최근 들은 곡 (곡당 1회, 최근순)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /history/top:
+    get:
+      tags: [history]
+      operationId: getTopTracks
+      summary: 기간별 많이 재생한 곡
+      parameters:
+        - { name: window, in: query, schema: { type: string, enum: [30d, 90d, 365d, all], default: 90d } }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: 많이 들은 곡
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrackPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /history:
+    delete:
+      tags: [history]
+      operationId: deleteHistory
+      summary: 내 재생 기록 전체 삭제
+      responses:
+        '204': { description: 삭제됨 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: adminListUsers
+      summary: 사용자 목록 (관리자)
+      responses:
+        '200':
+          description: 사용자 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [admin]
+      operationId: adminCreateUser
+      summary: 사용자 생성 (관리자)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, role]
+              properties:
+                username: { type: string, minLength: 1, maxLength: 64 }
+                display_name: { type: string, maxLength: 100 }
+                password: { type: string, minLength: 10, maxLength: 256 }
+                role: { type: string, enum: [admin, member] }
+                library_ids: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: 생성됨
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /admin/users/{userId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string } }
+    patch:
+      tags: [admin]
+      operationId: adminUpdateUser
+      summary: 역할·상태·라이브러리 접근·비밀번호 재설정
+      description: '`status=disabled` 또는 라이브러리 접근 축소는 즉시 적용되며 해당 사용자의 미디어 티켓도 무효가 된다.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string }
+                role: { type: string, enum: [admin, member] }
+                status: { type: string, enum: [active, disabled] }
+                library_ids: { type: array, items: { type: string } }
+                new_password: { type: string, minLength: 10, maxLength: 256 }
+                revoke_sessions: { type: boolean }
+      responses:
+        '200':
+          description: 수정됨
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [admin]
+      operationId: adminDeleteUser
+      summary: 사용자 삭제 (관리자)
+      responses:
+        '204': { description: 삭제됨 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /admin/libraries:
+    get:
+      tags: [admin]
+      operationId: adminListLibraries
+      summary: 라이브러리와 스캔 상태 (경로는 포함하지 않음)
+      responses:
+        '200':
+          description: 라이브러리 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AdminLibrary' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /admin/libraries/{libraryId}/scan:
+    post:
+      tags: [admin]
+      operationId: adminStartScan
+      summary: 스캔 시작
+      parameters:
+        - { name: libraryId, in: path, required: true, schema: { type: string } }
+      responses:
+        '202':
+          description: 작업 접수. 이미 실행 중이면 그 작업을 돌려준다.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+
+  /admin/jobs/{jobId}:
+    get:
+      tags: [admin]
+      operationId: adminGetJob
+      summary: 관리 작업 상태 조회 (관리자)
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 작업 상태
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '426': { $ref: '#/components/responses/ClientTooOld' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: '`Authorization: Bearer <access_token>`. 액세스 토큰은 불투명 문자열이며 서버가 해시로 조회한다.'
+    mediaTicket:
+      type: apiKey
+      in: query
+      name: mt
+      description: |
+        렌디션·표지 요청 전용 단기 서명 티켓. 사용자·세션·대상 자원·만료 시각에 묶인다.
+        다른 API에는 쓸 수 없다. 서버와 프록시는 접근 로그에서 `mt` 값을 가린다.
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: 이전 응답의 `next_cursor`. 불투명 문자열이며 앱이 만들거나 해석하지 않는다.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    TrackId:
+      name: trackId
+      in: path
+      required: true
+      schema: { type: string }
+    PlaylistId:
+      name: playlistId
+      in: path
+      required: true
+      schema: { type: string }
+    RenditionId:
+      name: renditionId
+      in: path
+      required: true
+      schema: { type: string }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: 마지막으로 받은 ETag. 없으면 428.
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: 앱이 만든 UUID. 같은 키의 재요청은 처음 결과를 그대로 돌려준다(24시간 보존).
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: '`validation_failed` — `errors`에 필드별 사유'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: |
+        `access_expired`(갱신 후 재시도), `access_invalid`, `session_revoked`(재로그인 필요),
+        `account_disabled`.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example: { type: 'about:blank', title: Unauthorized, status: 401, code: access_expired, detail: 액세스 토큰이 만료되었습니다., request_id: req_9Kd1 }
+    Forbidden:
+      description: '`forbidden` — 관리자 역할 필요'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: '`not_found` — 없거나 접근 권한이 없음'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: '`username_taken`, `last_admin` 등 상태 충돌'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Gone:
+      description: '`rendition_superseded` — 원본이 바뀜. 앱은 렌디션을 다시 결정한다.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PreconditionFailed:
+      description: '`version_conflict` — 다른 기기가 먼저 수정함. 응답 ETag가 현재 버전.'
+      headers:
+        ETag: { schema: { type: string } }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PreconditionRequired:
+      description: '`precondition_required` — `If-Match` 누락'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ClientTooOld:
+      description: '`client_too_old` — 앱의 API 버전이 서버의 `min_client_api_minor`보다 낮음. 앱 업데이트 안내.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: '`rate_limited` — `Retry-After` 초 뒤 재시도'
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unavailable:
+      description: |
+        `storage_unavailable`(음악 저장소 마운트 장애), `maintenance`(마이그레이션·복원 중),
+        `setup_required`(관리자 계정 미생성). 지수 백오프로 재시도 가능.
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code:
+          type: string
+          description: 기계 판독용 오류 코드. 전체 목록은 02-api-guide.md §오류 코드.
+        detail: { type: string, description: 사람이 읽는 설명. 경로·SQL·스택을 포함하지 않는다. }
+        request_id: { type: string }
+        retryable: { type: boolean }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+
+    ServerInfo:
+      type: object
+      required: [server_id, name, product, version, api, min_client_api_minor, features, limits, setup_required]
+      properties:
+        server_id: { type: string, description: 서버 설치의 영속 식별자. 앱의 서버 프로필·캐시 분리 키. }
+        name: { type: string }
+        product: { type: string, const: bangmusic-server }
+        version: { type: string, description: 서버 소프트웨어 버전(SemVer) }
+        api:
+          type: object
+          required: [major, minor]
+          properties:
+            major: { type: integer }
+            minor: { type: integer, description: '`/v1` 안에서 기능이 추가될 때마다 증가' }
+        min_client_api_minor: { type: integer }
+        features:
+          type: array
+          description: 서버가 켜 둔 선택 기능. 앱은 모르는 값을 무시한다.
+          items: { type: string }
+        transcode_profiles:
+          type: array
+          items: { type: string }
+        limits:
+          type: object
+          additionalProperties: { type: integer }
+        setup_required: { type: boolean }
+
+    DeviceInfo:
+      type: object
+      required: [name, platform, app_version, installation_id]
+      properties:
+        name: { type: string, maxLength: 100 }
+        platform: { type: string, enum: [android, ios, other] }
+        app_version: { type: string }
+        installation_id:
+          type: string
+          format: uuid
+          description: 앱 설치마다 무작위 생성. 같은 값으로 다시 로그인하면 이전 세션을 대체한다. 하드웨어 식별자를 쓰지 않는다.
+
+    LoginRequest:
+      type: object
+      required: [username, password, device]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        device: { $ref: '#/components/schemas/DeviceInfo' }
+
+    TokenResponse:
+      type: object
+      required: [session_id, access_token, access_expires_at, refresh_token, refresh_expires_at, user]
+      properties:
+        session_id: { type: string }
+        access_token: { type: string }
+        access_expires_at: { type: string, format: date-time }
+        refresh_token: { type: string }
+        refresh_expires_at: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/UserSummary' }
+
+    UserSummary:
+      type: object
+      required: [id, username, role]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        display_name: { type: string }
+        role: { type: string, enum: [admin, member] }
+
+    Me:
+      allOf:
+        - $ref: '#/components/schemas/UserSummary'
+        - type: object
+          required: [libraries]
+          properties:
+            libraries:
+              type: array
+              items:
+                type: object
+                required: [id, name, status]
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  status: { type: string, enum: [online, unavailable] }
+
+    Session:
+      type: object
+      required: [id, device_name, platform, created_at, last_seen_at, current]
+      properties:
+        id: { type: string }
+        device_name: { type: string }
+        platform: { type: string }
+        app_version: { type: string }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        current: { type: boolean }
+
+    ArtistRef:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+
+    AlbumRef:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: string }
+        title: { type: string }
+
+    SourceFormat:
+      type: object
+      description: 원본 파일의 형식. 실제로 받는 형식은 렌디션에 있다.
+      required: [container, codec]
+      properties:
+        container: { type: string }
+        codec: { type: string }
+        sample_rate: { type: integer }
+        channels: { type: integer }
+        bit_depth: { type: [integer, 'null'] }
+        bitrate: { type: [integer, 'null'] }
+
+    Track:
+      type: object
+      required: [id, title, artists, duration_ms, media_version, state, updated_at]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        title_sort: { type: [string, 'null'] }
+        artists: { type: array, items: { $ref: '#/components/schemas/ArtistRef' } }
+        album:
+          oneOf:
+            - $ref: '#/components/schemas/AlbumRef'
+            - type: 'null'
+        disc_no: { type: [integer, 'null'] }
+        track_no: { type: [integer, 'null'] }
+        duration_ms: { type: integer }
+        year: { type: [integer, 'null'] }
+        genre: { type: [string, 'null'] }
+        artwork_id: { type: [string, 'null'] }
+        media_version: { type: string, description: 원본 바이트가 바뀌면 바뀌는 값. 다운로드본이 낡았는지 판단하는 기준. }
+        source_format: { $ref: '#/components/schemas/SourceFormat' }
+        state: { type: string, enum: [available, missing] }
+        has_lyrics: { type: array, items: { $ref: '#/components/schemas/LyricsKind' } }
+        updated_at: { type: string, format: date-time }
+
+    TrackPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Track' } }
+        next_cursor: { type: [string, 'null'] }
+
+    Album:
+      type: object
+      required: [id, title, track_count]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        album_artist:
+          oneOf:
+            - $ref: '#/components/schemas/ArtistRef'
+            - type: 'null'
+        year: { type: [integer, 'null'] }
+        artwork_id: { type: [string, 'null'] }
+        track_count: { type: integer }
+        duration_ms: { type: integer }
+
+    AlbumPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Album' } }
+        next_cursor: { type: [string, 'null'] }
+
+    AlbumDetail:
+      allOf:
+        - $ref: '#/components/schemas/Album'
+        - type: object
+          required: [tracks]
+          properties:
+            tracks: { type: array, items: { $ref: '#/components/schemas/Track' } }
+
+    Artist:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        name_sort: { type: [string, 'null'] }
+        album_count: { type: integer }
+        track_count: { type: integer }
+        artwork_id: { type: [string, 'null'] }
+
+    ArtistPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Artist' } }
+        next_cursor: { type: [string, 'null'] }
+
+    SearchResult:
+      type: object
+      required: [query_normalized]
+      properties:
+        query_normalized: { type: string }
+        tracks: { $ref: '#/components/schemas/TrackPage' }
+        albums: { $ref: '#/components/schemas/AlbumPage' }
+        artists: { $ref: '#/components/schemas/ArtistPage' }
+        playlists: { $ref: '#/components/schemas/PlaylistPage' }
+
+    Home:
+      type: object
+      required: [playlists, recent_tracks, top_tracks, recently_added_albums]
+      properties:
+        playlists: { type: array, items: { $ref: '#/components/schemas/Playlist' } }
+        recent_tracks: { type: array, items: { $ref: '#/components/schemas/Track' } }
+        top_tracks: { type: array, items: { $ref: '#/components/schemas/Track' } }
+        recently_added_albums: { type: array, items: { $ref: '#/components/schemas/Album' } }
+
+    ChangeBatch:
+      type: object
+      required: [changes, next_since, has_more]
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            required: [entity, id, op]
+            properties:
+              entity: { type: string, enum: [track, album, artist] }
+              id: { type: string }
+              op: { type: string, enum: [upsert, delete] }
+              track: { $ref: '#/components/schemas/Track' }
+              album: { $ref: '#/components/schemas/Album' }
+              artist: { $ref: '#/components/schemas/Artist' }
+        next_since: { type: string }
+        has_more: { type: boolean }
+
+    LyricsKind:
+      type: string
+      enum: [original, pronunciation_ko, translation_ko]
+
+    LyricsVariant:
+      type: object
+      required: [kind, synced, lines, source]
+      properties:
+        kind: { $ref: '#/components/schemas/LyricsKind' }
+        language: { type: [string, 'null'], description: BCP 47 }
+        synced: { type: boolean, description: false면 모든 `t_ms`가 null }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [t_ms, text]
+            properties:
+              t_ms: { type: [integer, 'null'] }
+              text: { type: string }
+        source:
+          type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [sidecar, embedded, user, provider, generated]
+              description: '`generated`는 서버가 오프라인으로 만든 값(현재는 한글 발음, 05장 §8.4). 사람이 확인하지 않았으므로 앱은 출처를 함께 보인다.'
+            name: { type: [string, 'null'] }
+            license_note: { type: [string, 'null'] }
+
+    Lyrics:
+      type: object
+      required: [track_id, version, offset_ms, variants]
+      properties:
+        track_id: { type: string }
+        version: { type: integer }
+        offset_ms: { type: integer, description: 요청한 사용자의 보정값. 양수면 가사를 늦춘다. }
+        variants: { type: array, items: { $ref: '#/components/schemas/LyricsVariant' } }
+
+    Playlist:
+      type: object
+      required: [id, name, version, item_count, duration_ms, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        artwork_id: { type: [string, 'null'], description: 업로드한 표지. null이면 앱이 `mosaic_artwork_ids`로 모자이크를 만든다. }
+        mosaic_artwork_ids: { type: array, maxItems: 4, items: { type: string } }
+        version: { type: integer }
+        item_count: { type: integer }
+        duration_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PlaylistPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Playlist' } }
+        next_cursor: { type: [string, 'null'] }
+
+    PlaylistItem:
+      type: object
+      required: [item_id, available]
+      properties:
+        item_id: { type: string }
+        available: { type: boolean, description: false면 곡이 누락되었거나 접근 권한이 없어 `track`이 없다. }
+        track: { $ref: '#/components/schemas/Track' }
+        added_at: { type: string, format: date-time }
+
+    PlaylistItemPage:
+      type: object
+      required: [items, next_cursor, version]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/PlaylistItem' } }
+        next_cursor: { type: [string, 'null'] }
+        version: { type: integer }
+
+    PlaylistEdit:
+      type: object
+      required: [ops]
+      properties:
+        ops:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            oneOf:
+              - type: object
+                required: [op, track_ids]
+                properties:
+                  op: { const: add }
+                  track_ids: { type: array, minItems: 1, items: { type: string } }
+                  after_item_id: { type: [string, 'null'], description: null이면 맨 앞. 생략하면 맨 뒤. }
+              - type: object
+                required: [op, item_ids]
+                properties:
+                  op: { const: remove }
+                  item_ids: { type: array, minItems: 1, items: { type: string } }
+              - type: object
+                required: [op, item_id, after_item_id]
+                properties:
+                  op: { const: move }
+                  item_id: { type: string }
+                  after_item_id: { type: [string, 'null'] }
+
+    FormatSpec:
+      type: object
+      required: [container, codec]
+      properties:
+        container: { type: string, examples: [flac, mp3, m4a, ogg, wav] }
+        codec: { type: string, examples: [flac, mp3, aac, alac, opus, vorbis, pcm] }
+        max_sample_rate: { type: integer }
+        max_bit_depth: { type: integer }
+
+    RenditionRequest:
+      type: object
+      required: [purpose, quality, accept]
+      properties:
+        purpose: { type: string, enum: [stream, download] }
+        quality:
+          type: string
+          description: '`original`은 가능하면 원본. 그 외는 `transcode_profiles` 중 하나이며 원본 비트레이트가 더 낮으면 원본을 준다.'
+          examples: [original, aac_256, aac_128]
+        accept:
+          type: array
+          description: 이 기기가 재생할 수 있는 형식. 원본이 여기에 없으면 서버가 변환한다.
+          minItems: 1
+          items: { $ref: '#/components/schemas/FormatSpec' }
+
+    Rendition:
+      type: object
+      required: [id, track_id, media_version, profile, state]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        media_version: { type: string }
+        profile: { type: string, examples: [original, aac_256] }
+        state: { type: string, enum: [ready, preparing, failed] }
+        mime: { type: string }
+        container: { type: string }
+        codec: { type: string }
+        size_bytes: { type: integer, description: '`ready`일 때만. 정확한 바이트 수.' }
+        duration_ms: { type: integer, description: 실제 제공 파일의 길이. 원본과 수 ms 다를 수 있다. }
+        sha256: { type: [string, 'null'], description: 제공 바이트 전체의 해시. 아직 계산 전이면 null. }
+        etag: { type: string }
+        seekable: { type: boolean }
+        media_url: { type: string, description: 서버 기준 상대 경로 + 미디어 티켓. 저장하지 말고 필요할 때 다시 받는다. }
+        ticket_expires_at: { type: string, format: date-time }
+        error_code: { type: [string, 'null'], description: '`failed`일 때: `transcode_failed`, `unsupported_source`, `media_missing`' }
+        retry_after_s: { type: [integer, 'null'] }
+
+    PlayEvent:
+      type: object
+      required: [event_id, track_id, started_at, played_ms, completed, source]
+      properties:
+        event_id: { type: string, format: uuid }
+        track_id: { type: string }
+        started_at: { type: string, format: date-time }
+        played_ms: { type: integer, minimum: 0 }
+        completed: { type: boolean }
+        source: { type: string, enum: [stream, offline] }
+        context:
+          type: object
+          properties:
+            type: { type: string, enum: [album, playlist, artist, search, library, queue] }
+            id: { type: [string, 'null'] }
+
+    AdminUser:
+      allOf:
+        - $ref: '#/components/schemas/UserSummary'
+        - type: object
+          required: [status, library_ids, created_at]
+          properties:
+            status: { type: string, enum: [active, disabled] }
+            library_ids: { type: array, items: { type: string } }
+            created_at: { type: string, format: date-time }
+            session_count: { type: integer }
+
+    AdminLibrary:
+      type: object
+      required: [id, name, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [online, unavailable] }
+        track_count: { type: integer }
+        missing_count: { type: integer }
+        last_scan_at: { type: [string, 'null'], format: date-time }
+        pending_review: { type: boolean, description: 대량 누락이 감지되어 스캔 결과 적용이 보류됨 }
+
+    Job:
+      type: object
+      required: [id, type, state]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [scan, transcode, hash, backup] }
+        state: { type: string, enum: [queued, running, succeeded, failed, canceled] }
+        progress: { type: [number, 'null'], minimum: 0, maximum: 1 }
+        error_code: { type: [string, 'null'] }
+        started_at: { type: [string, 'null'], format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }

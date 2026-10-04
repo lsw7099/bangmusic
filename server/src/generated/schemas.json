@@ -1,0 +1,3186 @@
+{
+  "$comment": "docs/design/openapi.yaml에서 생성. 직접 수정 금지. npm run gen:server",
+  "openapi_version": "1.0.0",
+  "schemas": [
+    {
+      "$id": "AdminLibrary",
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "online",
+            "unavailable"
+          ]
+        },
+        "track_count": {
+          "type": "integer"
+        },
+        "missing_count": {
+          "type": "integer"
+        },
+        "last_scan_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "pending_review": {
+          "type": "boolean",
+          "description": "대량 누락이 감지되어 스캔 결과 적용이 보류됨"
+        }
+      }
+    },
+    {
+      "$id": "AdminUser",
+      "allOf": [
+        {
+          "$ref": "UserSummary#"
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "library_ids",
+            "created_at"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "disabled"
+              ]
+            },
+            "library_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "session_count": {
+              "type": "integer"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "$id": "Album",
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "track_count"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "album_artist": {
+          "oneOf": [
+            {
+              "$ref": "ArtistRef#"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "year": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "artwork_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "track_count": {
+          "type": "integer"
+        },
+        "duration_ms": {
+          "type": "integer"
+        }
+      }
+    },
+    {
+      "$id": "AlbumDetail",
+      "allOf": [
+        {
+          "$ref": "Album#"
+        },
+        {
+          "type": "object",
+          "required": [
+            "tracks"
+          ],
+          "properties": {
+            "tracks": {
+              "type": "array",
+              "items": {
+                "$ref": "Track#"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "$id": "AlbumPage",
+      "type": "object",
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "Album#"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "$id": "AlbumRef",
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$id": "Artist",
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "name_sort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "album_count": {
+          "type": "integer"
+        },
+        "track_count": {
+          "type": "integer"
+        },
+        "artwork_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "$id": "ArtistPage",
+      "type": "object",
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "Artist#"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "$id": "ArtistRef",
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$id": "ChangeBatch",
+      "type": "object",
+      "required": [
+        "changes",
+        "next_since",
+        "has_more"
+      ],
+      "properties": {
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "entity",
+              "id",
+              "op"
+            ],
+            "properties": {
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "track",
+                  "album",
+                  "artist"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "op": {
+                "type": "string",
+                "enum": [
+                  "upsert",
+                  "delete"
+                ]
+              },
+              "track": {
+                "$ref": "Track#"
+              },
+              "album": {
+                "$ref": "Album#"
+              },
+              "artist": {
+                "$ref": "Artist#"
+              }
+            }
+          }
+        },
+        "next_since": {
+          "type": "string"
+        },
+        "has_more": {
+          "type": "boolean"
+        }
+      }
+    },
+    {
+      "$id": "DeviceInfo",
+      "type": "object",
+      "required": [
+        "name",
+        "platform",
+        "app_version",
+        "installation_id"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "android",
+            "ios",
+            "other"
+          ]
+        },
+        "app_version": {
+          "type": "string"
+        },
+        "installation_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "앱 설치마다 무작위 생성. 같은 값으로 다시 로그인하면 이전 세션을 대체한다. 하드웨어 식별자를 쓰지 않는다."
+        }
+      }
+    },
+    {
+      "$id": "FormatSpec",
+      "type": "object",
+      "required": [
+        "container",
+        "codec"
+      ],
+      "properties": {
+        "container": {
+          "type": "string",
+          "examples": [
+            "flac",
+            "mp3",
+            "m4a",
+            "ogg",
+            "wav"
+          ]
+        },
+        "codec": {
+          "type": "string",
+          "examples": [
+            "flac",
+            "mp3",
+            "aac",
+            "alac",
+            "opus",
+            "vorbis",
+            "pcm"
+          ]
+        },
+        "max_sample_rate": {
+          "type": "integer"
+        },
+        "max_bit_depth": {
+          "type": "integer"
+        }
+      }
+    },
+    {
+      "$id": "Home",
+      "type": "object",
+      "required": [
+        "playlists",
+        "recent_tracks",
+        "top_tracks",
+        "recently_added_albums"
+      ],
+      "properties": {
+        "playlists": {
+          "type": "array",
+          "items": {
+            "$ref": "Playlist#"
+          }
+        },
+        "recent_tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "Track#"
+          }
+        },
+        "top_tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "Track#"
+          }
+        },
+        "recently_added_albums": {
+          "type": "array",
+          "items": {
+            "$ref": "Album#"
+          }
+        }
+      }
+    },
+    {
+      "$id": "Job",
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "scan",
+            "transcode",
+            "hash",
+            "backup"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "canceled"
+          ]
+        },
+        "progress": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "error_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$id": "LoginRequest",
+      "type": "object",
+      "required": [
+        "username",
+        "password",
+        "device"
+      ],
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "device": {
+          "$ref": "DeviceInfo#"
+        }
+      }
+    },
+    {
+      "$id": "Lyrics",
+      "type": "object",
+      "required": [
+        "track_id",
+        "version",
+        "offset_ms",
+        "variants"
+      ],
+      "properties": {
+        "track_id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "offset_ms": {
+          "type": "integer",
+          "description": "요청한 사용자의 보정값. 양수면 가사를 늦춘다."
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "LyricsVariant#"
+          }
+        }
+      }
+    },
+    {
+      "$id": "LyricsKind",
+      "type": "string",
+      "enum": [
+        "original",
+        "pronunciation_ko",
+        "translation_ko"
+      ]
+    },
+    {
+      "$id": "LyricsVariant",
+      "type": "object",
+      "required": [
+        "kind",
+        "synced",
+        "lines",
+        "source"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "LyricsKind#"
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "BCP 47"
+        },
+        "synced": {
+          "type": "boolean",
+          "description": "false면 모든 `t_ms`가 null"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "t_ms",
+              "text"
+            ],
+            "properties": {
+              "t_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "sidecar",
+                "embedded",
+                "user",
+                "provider",
+                "generated"
+              ],
+              "description": "`generated`는 서버가 오프라인으로 만든 값(현재는 한글 발음, 05장 §8.4). 사람이 확인하지 않았으므로 앱은 출처를 함께 보인다."
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "license_note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "$id": "Me",
+      "allOf": [
+        {
+          "$ref": "UserSummary#"
+        },
+        {
+          "type": "object",
+          "required": [
+            "libraries"
+          ],
+          "properties": {
+            "libraries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "status"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "online",
+                      "unavailable"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "$id": "PlayEvent",
+      "type": "object",
+      "required": [
+        "event_id",
+        "track_id",
+        "started_at",
+        "played_ms",
+        "completed",
+        "source"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "played_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "stream",
+            "offline"
+          ]
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "album",
+                "playlist",
+                "artist",
+                "search",
+                "library",
+                "queue"
+              ]
+            },
+            "id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "$id": "Playlist",
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version",
+        "item_count",
+        "duration_ms",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artwork_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "업로드한 표지. null이면 앱이 `mosaic_artwork_ids`로 모자이크를 만든다."
+        },
+        "mosaic_artwork_ids": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "version": {
+          "type": "integer"
+        },
+        "item_count": {
+          "type": "integer"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$id": "PlaylistEdit",
+      "type": "object",
+      "required": [
+        "ops"
+      ],
+      "properties": {
+        "ops": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "op",
+                  "track_ids"
+                ],
+                "properties": {
+                  "op": {
+                    "const": "add"
+                  },
+                  "track_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "after_item_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "null이면 맨 앞. 생략하면 맨 뒤."
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "op",
+                  "item_ids"
+                ],
+                "properties": {
+                  "op": {
+                    "const": "remove"
+                  },
+                  "item_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "op",
+                  "item_id",
+                  "after_item_id"
+                ],
+                "properties": {
+                  "op": {
+                    "const": "move"
+                  },
+                  "item_id": {
+                    "type": "string"
+                  },
+                  "after_item_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "$id": "PlaylistItem",
+      "type": "object",
+      "required": [
+        "item_id",
+        "available"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string"
+        },
+        "available": {
+          "type": "boolean",
+          "description": "false면 곡이 누락되었거나 접근 권한이 없어 `track`이 없다."
+        },
+        "track": {
+          "$ref": "Track#"
+        },
+        "added_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$id": "PlaylistItemPage",
+      "type": "object",
+      "required": [
+        "items",
+        "next_cursor",
+        "version"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "PlaylistItem#"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
+    {
+      "$id": "PlaylistPage",
+      "type": "object",
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "Playlist#"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "$id": "Problem",
+      "type": "object",
+      "required": [
+        "type",
+        "title",
+        "status",
+        "code"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "code": {
+          "type": "string",
+          "description": "기계 판독용 오류 코드. 전체 목록은 02-api-guide.md §오류 코드."
+        },
+        "detail": {
+          "type": "string",
+          "description": "사람이 읽는 설명. 경로·SQL·스택을 포함하지 않는다."
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "field",
+              "message"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$id": "Rendition",
+      "type": "object",
+      "required": [
+        "id",
+        "track_id",
+        "media_version",
+        "profile",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "track_id": {
+          "type": "string"
+        },
+        "media_version": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string",
+          "examples": [
+            "original",
+            "aac_256"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "preparing",
+            "failed"
+          ]
+        },
+        "mime": {
+          "type": "string"
+        },
+        "container": {
+          "type": "string"
+        },
+        "codec": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "description": "`ready`일 때만. 정확한 바이트 수."
+        },
+        "duration_ms": {
+          "type": "integer",
+          "description": "실제 제공 파일의 길이. 원본과 수 ms 다를 수 있다."
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "제공 바이트 전체의 해시. 아직 계산 전이면 null."
+        },
+        "etag": {
+          "type": "string"
+        },
+        "seekable": {
+          "type": "boolean"
+        },
+        "media_url": {
+          "type": "string",
+          "description": "서버 기준 상대 경로 + 미디어 티켓. 저장하지 말고 필요할 때 다시 받는다."
+        },
+        "ticket_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "error_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`failed`일 때: `transcode_failed`, `unsupported_source`, `media_missing`"
+        },
+        "retry_after_s": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "$id": "RenditionRequest",
+      "type": "object",
+      "required": [
+        "purpose",
+        "quality",
+        "accept"
+      ],
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "stream",
+            "download"
+          ]
+        },
+        "quality": {
+          "type": "string",
+          "description": "`original`은 가능하면 원본. 그 외는 `transcode_profiles` 중 하나이며 원본 비트레이트가 더 낮으면 원본을 준다.",
+          "examples": [
+            "original",
+            "aac_256",
+            "aac_128"
+          ]
+        },
+        "accept": {
+          "type": "array",
+          "description": "이 기기가 재생할 수 있는 형식. 원본이 여기에 없으면 서버가 변환한다.",
+          "minItems": 1,
+          "items": {
+            "$ref": "FormatSpec#"
+          }
+        }
+      }
+    },
+    {
+      "$id": "SearchResult",
+      "type": "object",
+      "required": [
+        "query_normalized"
+      ],
+      "properties": {
+        "query_normalized": {
+          "type": "string"
+        },
+        "tracks": {
+          "$ref": "TrackPage#"
+        },
+        "albums": {
+          "$ref": "AlbumPage#"
+        },
+        "artists": {
+          "$ref": "ArtistPage#"
+        },
+        "playlists": {
+          "$ref": "PlaylistPage#"
+        }
+      }
+    },
+    {
+      "$id": "ServerInfo",
+      "type": "object",
+      "required": [
+        "server_id",
+        "name",
+        "product",
+        "version",
+        "api",
+        "min_client_api_minor",
+        "features",
+        "limits",
+        "setup_required"
+      ],
+      "properties": {
+        "server_id": {
+          "type": "string",
+          "description": "서버 설치의 영속 식별자. 앱의 서버 프로필·캐시 분리 키."
+        },
+        "name": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string",
+          "const": "bangmusic-server"
+        },
+        "version": {
+          "type": "string",
+          "description": "서버 소프트웨어 버전(SemVer)"
+        },
+        "api": {
+          "type": "object",
+          "required": [
+            "major",
+            "minor"
+          ],
+          "properties": {
+            "major": {
+              "type": "integer"
+            },
+            "minor": {
+              "type": "integer",
+              "description": "`/v1` 안에서 기능이 추가될 때마다 증가"
+            }
+          }
+        },
+        "min_client_api_minor": {
+          "type": "integer"
+        },
+        "features": {
+          "type": "array",
+          "description": "서버가 켜 둔 선택 기능. 앱은 모르는 값을 무시한다.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "transcode_profiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "setup_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    {
+      "$id": "Session",
+      "type": "object",
+      "required": [
+        "id",
+        "device_name",
+        "platform",
+        "created_at",
+        "last_seen_at",
+        "current"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "device_name": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "app_version": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_seen_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "current": {
+          "type": "boolean"
+        }
+      }
+    },
+    {
+      "$id": "SourceFormat",
+      "type": "object",
+      "description": "원본 파일의 형식. 실제로 받는 형식은 렌디션에 있다.",
+      "required": [
+        "container",
+        "codec"
+      ],
+      "properties": {
+        "container": {
+          "type": "string"
+        },
+        "codec": {
+          "type": "string"
+        },
+        "sample_rate": {
+          "type": "integer"
+        },
+        "channels": {
+          "type": "integer"
+        },
+        "bit_depth": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bitrate": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "$id": "TokenResponse",
+      "type": "object",
+      "required": [
+        "session_id",
+        "access_token",
+        "access_expires_at",
+        "refresh_token",
+        "refresh_expires_at",
+        "user"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "access_token": {
+          "type": "string"
+        },
+        "access_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "refresh_token": {
+          "type": "string"
+        },
+        "refresh_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "user": {
+          "$ref": "UserSummary#"
+        }
+      }
+    },
+    {
+      "$id": "Track",
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "artists",
+        "duration_ms",
+        "media_version",
+        "state",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "title_sort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artists": {
+          "type": "array",
+          "items": {
+            "$ref": "ArtistRef#"
+          }
+        },
+        "album": {
+          "oneOf": [
+            {
+              "$ref": "AlbumRef#"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disc_no": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "track_no": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "year": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "genre": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artwork_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "media_version": {
+          "type": "string",
+          "description": "원본 바이트가 바뀌면 바뀌는 값. 다운로드본이 낡았는지 판단하는 기준."
+        },
+        "source_format": {
+          "$ref": "SourceFormat#"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "missing"
+          ]
+        },
+        "has_lyrics": {
+          "type": "array",
+          "items": {
+            "$ref": "LyricsKind#"
+          }
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$id": "TrackPage",
+      "type": "object",
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "Track#"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    {
+      "$id": "UserSummary",
+      "type": "object",
+      "required": [
+        "id",
+        "username",
+        "role"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "member"
+          ]
+        }
+      }
+    }
+  ],
+  "operations": [
+    {
+      "operationId": "getServerInfo",
+      "method": "GET",
+      "path": "/v1/server",
+      "url": "/v1/server",
+      "security": [],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "426",
+        "429",
+        "503"
+      ]
+    },
+    {
+      "operationId": "login",
+      "method": "POST",
+      "path": "/v1/auth/login",
+      "url": "/v1/auth/login",
+      "security": [],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "$ref": "LoginRequest#"
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "426",
+        "429",
+        "503"
+      ]
+    },
+    {
+      "operationId": "refreshToken",
+      "method": "POST",
+      "path": "/v1/auth/refresh",
+      "url": "/v1/auth/refresh",
+      "security": [],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "429",
+        "503"
+      ]
+    },
+    {
+      "operationId": "logout",
+      "method": "POST",
+      "path": "/v1/auth/logout",
+      "url": "/v1/auth/logout",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "204",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listSessions",
+      "method": "GET",
+      "path": "/v1/sessions",
+      "url": "/v1/sessions",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "revokeSession",
+      "method": "DELETE",
+      "path": "/v1/sessions/{sessionId}",
+      "url": "/v1/sessions/:sessionId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "204",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getMe",
+      "method": "GET",
+      "path": "/v1/me",
+      "url": "/v1/me",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deleteMe",
+      "method": "DELETE",
+      "path": "/v1/me",
+      "url": "/v1/me",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "204",
+        "400",
+        "401",
+        "409",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "changePassword",
+      "method": "PUT",
+      "path": "/v1/me/password",
+      "url": "/v1/me/password",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 256
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "204",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "exportMe",
+      "method": "GET",
+      "path": "/v1/me/export",
+      "url": "/v1/me/export",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getHome",
+      "method": "GET",
+      "path": "/v1/home",
+      "url": "/v1/home",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listTracks",
+      "method": "GET",
+      "path": "/v1/tracks",
+      "url": "/v1/tracks",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "title",
+              "added_at_desc",
+              "album"
+            ],
+            "default": "title"
+          },
+          "album_id": {
+            "type": "string"
+          },
+          "artist_id": {
+            "type": "string"
+          },
+          "library_id": {
+            "type": "string"
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getTrack",
+      "method": "GET",
+      "path": "/v1/tracks/{trackId}",
+      "url": "/v1/tracks/:trackId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "trackId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listAlbums",
+      "method": "GET",
+      "path": "/v1/albums",
+      "url": "/v1/albums",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "title",
+              "added_at_desc",
+              "year_desc"
+            ],
+            "default": "title"
+          },
+          "artist_id": {
+            "type": "string"
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getAlbum",
+      "method": "GET",
+      "path": "/v1/albums/{albumId}",
+      "url": "/v1/albums/:albumId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "albumId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "albumId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listArtists",
+      "method": "GET",
+      "path": "/v1/artists",
+      "url": "/v1/artists",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getArtist",
+      "method": "GET",
+      "path": "/v1/artists/{artistId}",
+      "url": "/v1/artists/:artistId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "artistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artistId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "search",
+      "method": "GET",
+      "path": "/v1/search",
+      "url": "/v1/search",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "types": {
+            "type": "string",
+            "examples": [
+              "track,album"
+            ]
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": [
+          "q"
+        ]
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getChanges",
+      "method": "GET",
+      "path": "/v1/changes",
+      "url": "/v1/changes",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        },
+        "required": [
+          "since"
+        ]
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "410",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getArtwork",
+      "method": "GET",
+      "path": "/v1/artwork/{artworkId}",
+      "url": "/v1/artwork/:artworkId",
+      "security": [
+        "bearerAuth",
+        "mediaTicket"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "artworkId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artworkId"
+        ]
+      },
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "integer",
+            "enum": [
+              96,
+              256,
+              512,
+              1024
+            ],
+            "default": 512
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "304",
+        "400",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getLyrics",
+      "method": "GET",
+      "path": "/v1/tracks/{trackId}/lyrics",
+      "url": "/v1/tracks/:trackId/lyrics",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "trackId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "304",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "putLyricsVariant",
+      "method": "PUT",
+      "path": "/v1/tracks/{trackId}/lyrics/{kind}",
+      "url": "/v1/tracks/:trackId/lyrics/:kind",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "LyricsKind#"
+          }
+        },
+        "required": [
+          "trackId",
+          "kind"
+        ]
+      },
+      "querystring": null,
+      "headers": {
+        "type": "object",
+        "properties": {
+          "if-match": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "if-match"
+        ]
+      },
+      "body": {
+        "type": "object",
+        "required": [
+          "format",
+          "body"
+        ],
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "lrc",
+              "plain"
+            ]
+          },
+          "language": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 200000
+          },
+          "source_name": {
+            "type": "string"
+          },
+          "license_note": {
+            "type": "string"
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "412",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "putLyricsOffset",
+      "method": "PUT",
+      "path": "/v1/tracks/{trackId}/lyrics/offset",
+      "url": "/v1/tracks/:trackId/lyrics/offset",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "trackId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "type": "object",
+        "required": [
+          "offset_ms"
+        ],
+        "properties": {
+          "offset_ms": {
+            "type": "integer",
+            "minimum": -10000,
+            "maximum": 10000
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "204",
+        "400",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listPlaylists",
+      "method": "GET",
+      "path": "/v1/playlists",
+      "url": "/v1/playlists",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createPlaylist",
+      "method": "POST",
+      "path": "/v1/playlists",
+      "url": "/v1/playlists",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": {
+        "type": "object",
+        "properties": {
+          "idempotency-key": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "body": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "track_ids": {
+            "type": "array",
+            "maxItems": 5000,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getPlaylist",
+      "method": "GET",
+      "path": "/v1/playlists/{playlistId}",
+      "url": "/v1/playlists/:playlistId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "playlistId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "updatePlaylist",
+      "method": "PATCH",
+      "path": "/v1/playlists/{playlistId}",
+      "url": "/v1/playlists/:playlistId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "playlistId"
+        ]
+      },
+      "querystring": null,
+      "headers": {
+        "type": "object",
+        "properties": {
+          "if-match": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "if-match"
+        ]
+      },
+      "body": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "412",
+        "426",
+        "428",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deletePlaylist",
+      "method": "DELETE",
+      "path": "/v1/playlists/{playlistId}",
+      "url": "/v1/playlists/:playlistId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "playlistId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "204",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listPlaylistItems",
+      "method": "GET",
+      "path": "/v1/playlists/{playlistId}/items",
+      "url": "/v1/playlists/:playlistId/items",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "playlistId"
+        ]
+      },
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "editPlaylist",
+      "method": "POST",
+      "path": "/v1/playlists/{playlistId}/edits",
+      "url": "/v1/playlists/:playlistId/edits",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "playlistId"
+        ]
+      },
+      "querystring": null,
+      "headers": {
+        "type": "object",
+        "properties": {
+          "if-match": {
+            "type": "string"
+          },
+          "idempotency-key": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "if-match"
+        ]
+      },
+      "body": {
+        "$ref": "PlaylistEdit#"
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "412",
+        "426",
+        "428",
+        "503"
+      ]
+    },
+    {
+      "operationId": "putPlaylistCover",
+      "method": "PUT",
+      "path": "/v1/playlists/{playlistId}/cover",
+      "url": "/v1/playlists/:playlistId/cover",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "playlistId"
+        ]
+      },
+      "querystring": null,
+      "headers": {
+        "type": "object",
+        "properties": {
+          "if-match": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "if-match"
+        ]
+      },
+      "body": null,
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "412",
+        "413",
+        "415",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deletePlaylistCover",
+      "method": "DELETE",
+      "path": "/v1/playlists/{playlistId}/cover",
+      "url": "/v1/playlists/:playlistId/cover",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "playlistId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "204",
+        "401",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "resolveRendition",
+      "method": "POST",
+      "path": "/v1/tracks/{trackId}/renditions",
+      "url": "/v1/tracks/:trackId/renditions",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "trackId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "$ref": "RenditionRequest#"
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "202",
+        "400",
+        "401",
+        "404",
+        "422",
+        "426",
+        "429",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getRendition",
+      "method": "GET",
+      "path": "/v1/renditions/{renditionId}",
+      "url": "/v1/renditions/:renditionId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "renditionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "renditionId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getMedia",
+      "method": "GET",
+      "path": "/v1/media/{renditionId}",
+      "url": "/v1/media/:renditionId",
+      "security": [
+        "bearerAuth",
+        "mediaTicket"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "renditionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "renditionId"
+        ]
+      },
+      "querystring": null,
+      "headers": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "examples": [
+              "bytes=1048576-"
+            ]
+          },
+          "if-range": {
+            "type": "string"
+          }
+        }
+      },
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "206",
+        "401",
+        "404",
+        "409",
+        "410",
+        "416",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "headMedia",
+      "method": "HEAD",
+      "path": "/v1/media/{renditionId}",
+      "url": "/v1/media/:renditionId",
+      "security": [
+        "bearerAuth",
+        "mediaTicket"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "renditionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "renditionId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "postPlayEvents",
+      "method": "POST",
+      "path": "/v1/history/events",
+      "url": "/v1/history/events",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "$ref": "PlayEvent#"
+            }
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getRecentTracks",
+      "method": "GET",
+      "path": "/v1/history/recent",
+      "url": "/v1/history/recent",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getTopTracks",
+      "method": "GET",
+      "path": "/v1/history/top",
+      "url": "/v1/history/top",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "enum": [
+              "30d",
+              "90d",
+              "365d",
+              "all"
+            ],
+            "default": "90d"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50
+          }
+        }
+      },
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deleteHistory",
+      "method": "DELETE",
+      "path": "/v1/history",
+      "url": "/v1/history",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "204",
+        "401",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "adminListUsers",
+      "method": "GET",
+      "path": "/v1/admin/users",
+      "url": "/v1/admin/users",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "403",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "adminCreateUser",
+      "method": "POST",
+      "path": "/v1/admin/users",
+      "url": "/v1/admin/users",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "type": "object",
+        "required": [
+          "username",
+          "password",
+          "role"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "password": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 256
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ]
+          },
+          "library_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "409",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "adminUpdateUser",
+      "method": "PATCH",
+      "path": "/v1/admin/users/{userId}",
+      "url": "/v1/admin/users/:userId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ]
+          },
+          "library_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 256
+          },
+          "revoke_sessions": {
+            "type": "boolean"
+          }
+        }
+      },
+      "body_required": true,
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "409",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "adminDeleteUser",
+      "method": "DELETE",
+      "path": "/v1/admin/users/{userId}",
+      "url": "/v1/admin/users/:userId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "204",
+        "401",
+        "403",
+        "404",
+        "409",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "adminListLibraries",
+      "method": "GET",
+      "path": "/v1/admin/libraries",
+      "url": "/v1/admin/libraries",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": null,
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "403",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "adminStartScan",
+      "method": "POST",
+      "path": "/v1/admin/libraries/{libraryId}/scan",
+      "url": "/v1/admin/libraries/:libraryId/scan",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "202",
+        "401",
+        "403",
+        "404",
+        "426",
+        "503"
+      ]
+    },
+    {
+      "operationId": "adminGetJob",
+      "method": "GET",
+      "path": "/v1/admin/jobs/{jobId}",
+      "url": "/v1/admin/jobs/:jobId",
+      "security": [
+        "bearerAuth"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "querystring": null,
+      "headers": null,
+      "body": null,
+      "body_required": false,
+      "responses": [
+        "200",
+        "401",
+        "403",
+        "404",
+        "426",
+        "503"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+# FN-03 (L1) — 전송 중 연결을 끊고 이어받은 다운로드의 SHA-256 일치
+# 2026-10-03, 개발 PC(Windows 11), 로컬 서버(tools/e2e/app-test-server.mts, 합성 음원), 앱 코드: HttpTransfer + DownloadEngine
+# 테스트: app/test/integration/download_real_server_test.dart
+# 방법: 앱 ↔ 서버 사이 TCP 중계가 렌디션 크기의 절반에서 연결을 끊음 → 엔진이 network 실패 → 5초 백오프 →
+#       .part 크기에서 Range/If-Range로 이어받기 → 검증 → 완료. 기준값은 같은 렌디션을 중계 없이 처음부터 받은 SHA-256.
+
+FN-03 original: 길이 300초 곡, 6039160 B, 끊긴 뒤 이어받기, sha256=cd13547ebfcbbd27946f45ed29ab191ed4be3243614f88d2e20fb9241ccbf249, 검증=full
+FN-03 aac_128 : 길이 300초 곡, 4853122 B, 끊긴 뒤 이어받기, sha256=8852b6bd7c51c3bc16da406494ad95a1d057d91555ab1a54e679d011bb995a59, 검증=full
+결과: 2/2 통과 (기준 SHA-256·서버가 준 SHA-256과 모두 일치, 파일 크기 = size_bytes)
+
+# 실행
+#   cd app && FFMPEG=... FFPROBE=... flutter test test/integration/download_real_server_test.dart
+
+# FN-22 (L1) — 오프라인 중 쌓인 재생 기록·플레이리스트 편집이 복귀 후 중복 없이 반영
+# 테스트: app/test/integration/offline_sync_real_server_test.dart, 확인: 서버 GET /me/export
+# 시나리오: 오프라인 편집 2건(뒤에 추가, 맨 앞 추가) + 재생 기록 3건(source=offline) 적재 → 그사이 다른 기기가 같은 플레이리스트 편집
+#          → 복귀 동기화(버전 충돌 412 → 최신 버전으로 재시도) → 응답을 못 받은 것처럼 같은 편집·기록(같은 Idempotency-Key·event_id) 재전송
+FN-22: 편집 2건 반영(충돌 후 재시도 포함), 재전송 시 중복 0, 재생 기록 3건(중복 0), 항목 순서 = [맨 앞 추가, 원래 곡, 다른 기기 추가, 오프라인 추가]
+결과: 1/1 통과
+
+# FN-21 (L1) — 서버 프로필 2개 전환 시 다운로드가 섞이지 않음, 같은 주소의 다른 server_id에는 토큰을 보내지 않음
+# 테스트: app/test/integration/profiles_real_server_test.dart (실제 로컬 서버 2대 + 요청 헤더 기록 중계)
+# 시나리오: A(중계 주소)에서 1곡 받기 → B 로그인(서버 추가) → B에 A 다운로드 안 보임 → A로 전환, 받은 곡 그대로
+#          → 중계 대상을 B로 바꿔 "같은 주소에 다른 서버" → A 재활성화·요청·동기화
+FN-21: A·B 다운로드 분리, A 복귀 시 유지, 주소 재사용 시 B로 간 요청 1건(/v1/server, 신원 확인) — Authorization 0건
+결과: 1/1 통과. 단위: test/core/server_identity_test.dart 4개(토큰·리프레시 미전송, 재연결 후 재확인, 확인 실패 시 미전송)
