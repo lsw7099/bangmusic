@@ -53,7 +53,11 @@ describe('FN-08 이동·이름 변경', () => {
 
   it('태그만 고친 뒤 이동 → 오디오 지문으로 같은 곡, 미디어 버전은 바뀜', async () => {
     const ffmpeg = env.ctx.config.ffmpeg;
-    const before = tracksByTitle().get('중복')!;
+    // 제목 '중복'인 곡은 일부러 2개(duplicate-a·b)다. 제목으로 찾으면 스캔 순서(디렉터리 나열 순서)에 따라
+    // b를 집어 Linux에서만 실패했다 → 고칠 파일의 경로로 찾는다.
+    const before = env.ctx.store.get<T>(`SELECT t.id, t.title, t.media_version, t.state FROM tracks t JOIN media_files m ON m.track_id = t.id
+      WHERE m.library_id = ? AND m.rel_path = ?`, env.lib1, '이상 파일/duplicate-a.mp3')!;
+    assert.equal(before.title, '중복');
     const src = join(lib1(), '이상 파일', 'duplicate-a.mp3');
     const dst = join(lib1(), '이상 파일', 'retagged-moved.mp3');
     const r = spawnSync(ffmpeg, ['-v', 'error', '-y', '-i', src, '-map', '0', '-c', 'copy', '-metadata', 'title=중복 (태그 수정)', dst]);

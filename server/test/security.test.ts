@@ -81,8 +81,12 @@ describe('SEC-02~04 심볼릭 링크', () => {
       assert.equal(res.json().code, 'media_missing');
       assert.doesNotMatch(res.body, /outside|music|[A-Z]:\\/i);
     } finally {
+      // 미디어 요청이 예약한 재스캔이 바꿔치기 동안 돌면 이 폴더의 곡이 missing으로 남는다(서버 동작은 정상).
+      // 원래대로 돌려 놓고 다시 스캔해 다음 시험에 영향을 주지 않는다 — Linux에서만 실패하던 SEC-06·07·10의 원인
+      await env.ctx.jobs.idle();
       rmSync(real);
       renameSync(outside, real);
+      await scanLibrary(env.ctx, env.lib1);
     }
   });
 
