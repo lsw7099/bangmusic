@@ -1,6 +1,8 @@
 // S7 미니 플레이어, S8 몰입 화면 (LP · 가사 · 대기열)
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:bangmusic_api/bangmusic_api.dart';
 import 'package:flutter/material.dart' hide RepeatMode;
@@ -11,6 +13,8 @@ import '../../domain/playback_state.dart';
 import '../../domain/queue.dart';
 import '../../platform/player_port.dart';
 import '../scope.dart';
+import '../ambient.dart';
+import '../glass.dart';
 import '../tokens.dart';
 import '../widgets/common.dart';
 import 'download_screens.dart';
@@ -32,23 +36,17 @@ class _PlayerBuilder extends StatelessWidget {
 }
 
 class _PlayButton extends StatelessWidget {
-  const _PlayButton(this.p, {this.size = 40, this.filled = false});
+  const _PlayButton(this.p);
   final PlayerPort p;
-  final double size;
-  final bool filled;
 
   @override
   Widget build(BuildContext context) {
     final st = p.status.value;
     if (st == PlaybackStatus.loading || st == PlaybackStatus.buffering) {
-      return SizedBox(width: 48, height: 48, child: Padding(padding: const EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2.5, semanticsLabel: '불러오는 중')));
+      return const SizedBox(width: 48, height: 48, child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2.5, semanticsLabel: '불러오는 중')));
     }
     final playing = st == PlaybackStatus.playing;
-    final icon = Icon(playing ? Icons.pause : Icons.play_arrow, size: size);
-    final tooltip = playing ? '일시정지' : '재생';
-    return filled
-        ? IconButton.filled(onPressed: playing ? p.pause : p.play, icon: icon, tooltip: tooltip, iconSize: size)
-        : IconButton(onPressed: playing ? p.pause : p.play, icon: icon, tooltip: tooltip);
+    return IconButton(onPressed: playing ? p.pause : p.play, icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 30), tooltip: playing ? '일시정지' : '재생');
   }
 }
 
@@ -57,9 +55,13 @@ class _PlayButton extends StatelessWidget {
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
 
+  /// 탭 막대 위에 뜬 유리 알약의 높이 (04장 §3.4)
+  static const height = 64.0;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final g = context.glass;
     return _PlayerBuilder(builder: (context, p) {
       final t = p.currentTrack;
       if (t == null) return const SizedBox.shrink();
@@ -67,54 +69,66 @@ class MiniPlayer extends StatelessWidget {
       final hideArtist = context.textScale >= 1.5;
       // 받은 곡을 오프라인으로 재생 중이면 작은 오프라인 아이콘 (04장 S7)
       final offlineLocal = context.watchApp().offline && p.nowSource.value.local;
-      return Material(
-        color: c.surface,
-        child: InkWell(
-          onTap: () => openNowPlaying(context),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            StreamBuilder<Duration>(
-              stream: p.position,
-              builder: (_, s) {
-                final pos = s.data?.inMilliseconds ?? 0;
-                return LinearProgressIndicator(value: t.durationMs == 0 ? 0 : (pos / t.durationMs).clamp(0, 1), minHeight: 2, backgroundColor: c.outline);
-              },
-            ),
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 64),
-              child: GestureDetector(
-                onHorizontalDragEnd: (d) {
-                  final v = d.primaryVelocity ?? 0;
-                  if (v < -200) p.skipToNext();
-                  if (v > 200) p.skipToPrevious();
-                },
-                // 위로 끌기 → 몰입 화면 (04장 S7. 누르기와 같은 기능의 보조 수단)
-                onVerticalDragEnd: (d) {
-                  if ((d.primaryVelocity ?? 0) < -200) openNowPlaying(context);
-                },
-                child: Row(children: [
-                  const SizedBox(width: Space.sm),
-                  Artwork(t.artworkId, size: 48, label: t.title),
-                  const SizedBox(width: Space.md),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                      Row(children: [
-                        if (offlineLocal) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.cloud_off, size: 14, color: c.textMuted, semanticLabel: '오프라인, 받은 곡 재생 중')),
-                        Flexible(child: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.titleMedium)),
+      return Glass(
+        circle: true,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () => openNowPlaying(context),
+            child: Stack(children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: height),
+                child: GestureDetector(
+                  onHorizontalDragEnd: (d) {
+                    final v = d.primaryVelocity ?? 0;
+                    if (v < -200) p.skipToNext();
+                    if (v > 200) p.skipToPrevious();
+                  },
+                  // 위로 끌기 → 몰입 화면 (04장 S7. 누르기와 같은 기능의 보조 수단)
+                  onVerticalDragEnd: (d) {
+                    if ((d.primaryVelocity ?? 0) < -200) openNowPlaying(context);
+                  },
+                  child: Row(children: [
+                    const SizedBox(width: Space.sm),
+                    Artwork(t.artworkId, size: 48, radius: 24, label: t.title),
+                    const SizedBox(width: Space.md),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                        Row(children: [
+                          if (offlineLocal) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.cloud_off, size: 14, color: g.onGlassMuted, semanticLabel: '오프라인, 받은 곡 재생 중')),
+                          Flexible(child: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.titleMedium?.copyWith(color: g.onGlass))),
+                        ]),
+                        if (err != null)
+                          Row(children: [Icon(Icons.error_outline, size: 16, color: c.danger), const SizedBox(width: 4), Flexible(child: Text(err, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: g.onGlass, fontSize: 13)))])
+                        else if (p.nowSource.value.preparing)
+                          Text('서버에서 준비 중', style: context.text.bodySmall?.copyWith(color: g.onGlassMuted))
+                        else if (!hideArtist)
+                          Text(artistNames(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.bodySmall?.copyWith(color: g.onGlassMuted)),
                       ]),
-                      if (err != null)
-                        Row(children: [Icon(Icons.error_outline, size: 16, color: c.danger), const SizedBox(width: 4), Flexible(child: Text(err, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.danger, fontSize: 13)))])
-                      else if (p.nowSource.value.preparing)
-                        Text('서버에서 준비 중', style: context.text.bodySmall?.copyWith(color: c.textMuted))
-                      else if (!hideArtist)
-                        Text(artistNames(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.bodySmall?.copyWith(color: c.textMuted)),
-                    ]),
-                  ),
-                  _PlayButton(p),
-                  IconButton(onPressed: p.skipToNext, icon: const Icon(Icons.skip_next), tooltip: '다음 곡'),
-                ]),
+                    ),
+                    IconTheme.merge(data: IconThemeData(color: g.onGlass), child: _PlayButton(p)),
+                    IconButton(onPressed: p.skipToNext, icon: Icon(Icons.skip_next_rounded, color: g.onGlass), tooltip: '다음 곡'),
+                    const SizedBox(width: Space.xs),
+                  ]),
+                ),
               ),
-            ),
-          ]),
+              // 진행선: 알약 아래 가장자리 안쪽
+              Positioned(
+                left: 28, right: 28, bottom: 3,
+                child: StreamBuilder<Duration>(
+                  stream: p.position,
+                  builder: (_, s) {
+                    final pos = s.data?.inMilliseconds ?? 0;
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(value: t.durationMs == 0 ? 0 : (pos / t.durationMs).clamp(0, 1), minHeight: 2.5, backgroundColor: g.onGlass.withValues(alpha: 0.12)),
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
         ),
       );
     });
@@ -134,144 +148,251 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return _PlayerBuilder(builder: (context, p) {
-      final t = p.currentTrack;
-      final q = p.playQueue;
-      if (t == null || q == null) {
-        return Scaffold(appBar: AppBar(), body: const EmptyState(title: '재생 중인 곡이 없습니다'));
-      }
-      final big = context.textScale >= 1.5;
-      final size = MediaQuery.sizeOf(context);
-      final landscape = size.width > size.height && size.width >= 600;
-      Widget pane(int i) => switch (i) {
-            0 => Center(child: _LpDisc(track: t, player: p)),
-            1 => _LyricsPane(track: t, player: p, showDisc: !big),
-            _ => _QueuePane(player: p),
-          };
-      return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.keyboard_arrow_down), tooltip: '닫기'),
-          title: Text(q.context.name == null ? '재생 중' : '${q.context.name} 에서 재생 중', style: context.text.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-          centerTitle: true,
-        ),
-        body: SafeArea(
-          child: landscape
-              ? Row(children: [
-                  Expanded(child: _controls(context, p, t, q, _LpDisc(track: t, player: p, fill: true), showPanes: false, landscape: true)),
-                  const VerticalDivider(width: 1),
-                  Expanded(
-                    child: Column(children: [
-                      Padding(
-                        padding: const EdgeInsets.all(Space.md),
-                        child: SegmentedButton<int>(
-                          segments: const [ButtonSegment(value: 1, label: Text('가사')), ButtonSegment(value: 2, label: Text('대기열'))],
-                          selected: {_pane == 0 ? 1 : _pane},
-                          onSelectionChanged: (s) => setState(() => _pane = s.first),
-                          showSelectedIcon: false,
+    // 몰입 화면은 테마와 관계없이 어두운 화면: 흐린 표지 + 가림막 위에 밝은 글자 (04장 §3.4)
+    final off = context.glassOff;
+    return Theme(
+      data: buildTheme(Brightness.dark, glassOff: off),
+      child: Builder(builder: (context) => _PlayerBuilder(builder: (context, p) {
+        final t = p.currentTrack;
+        final q = p.playQueue;
+        if (t == null || q == null) {
+          return const GlassScaffold(appBar: GlassAppBar(), body: EmptyState(title: '재생 중인 곡이 없습니다'));
+        }
+        final big = context.textScale >= 1.5;
+        final size = MediaQuery.sizeOf(context);
+        final landscape = size.width > size.height && size.width >= 600;
+        Widget pane(int i) => switch (i) {
+              0 => Center(child: _LpDisc(track: t, player: p)),
+              1 => _LyricsPane(track: t, player: p, showDisc: !big),
+              _ => _QueuePane(player: p),
+            };
+        final header = Padding(
+          padding: const EdgeInsets.fromLTRB(Space.md, Space.sm, Space.md, 0),
+          child: Row(children: [
+            GlassIconButton(icon: const Icon(Icons.keyboard_arrow_down_rounded), onPressed: () => Navigator.pop(context), tooltip: '닫기', size: 44, iconSize: 26),
+            Expanded(
+              child: Column(children: [
+                Text('재생 중', style: context.text.bodySmall?.copyWith(color: context.glass.onGlassMuted, letterSpacing: 0.5)),
+                if (q.context.name != null)
+                  Text(q.context.name!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: context.text.titleMedium),
+              ]),
+            ),
+            const SizedBox(width: 44),
+          ]),
+        );
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: Stack(children: [
+            Positioned.fill(child: _ArtBackdrop(track: t)),
+            SafeArea(
+              child: Column(children: [
+                header,
+                Expanded(
+                  child: landscape
+                      ? Row(children: [
+                          Expanded(child: _controls(context, p, t, q, _LpDisc(track: t, player: p, fill: true), showPanes: false, landscape: true)),
+                          Expanded(
+                            child: Column(children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(Space.xl, Space.md, Space.xl, Space.sm),
+                                child: GlassSegmented(labels: const ['가사', '대기열'], values: const [1, 2], selected: _pane == 0 ? 1 : _pane, onSelect: (v) => setState(() => _pane = v)),
+                              ),
+                              Expanded(child: pane(_pane == 0 ? 1 : _pane)),
+                            ]),
+                          ),
+                        ])
+                      : _controls(
+                          context, p, t, q,
+                          GestureDetector(
+                            onHorizontalDragEnd: (d) {
+                              final v = d.primaryVelocity ?? 0;
+                              if (v < -300 && _pane < 2) setState(() => _pane++);
+                              if (v > 300 && _pane > 0) setState(() => _pane--);
+                            },
+                            child: AnimatedSwitcher(duration: context.reduceMotion ? Duration.zero : Motion.base, child: KeyedSubtree(key: ValueKey(_pane), child: pane(_pane))),
+                          ),
+                          showPanes: true,
                         ),
-                      ),
-                      Expanded(child: pane(_pane == 0 ? 1 : _pane)),
-                    ]),
-                  ),
-                ])
-              : _controls(
-                  context, p, t, q,
-                  GestureDetector(
-                    onHorizontalDragEnd: (d) {
-                      final v = d.primaryVelocity ?? 0;
-                      if (v < -300 && _pane < 2) setState(() => _pane++);
-                      if (v > 300 && _pane > 0) setState(() => _pane--);
-                    },
-                    child: pane(_pane),
-                  ),
-                  showPanes: true,
                 ),
-        ),
-      );
-    });
+              ]),
+            ),
+          ]),
+        );
+      })),
+    );
   }
 
   /// 위쪽 구획 + 제목·탐색·재생 제어(+ 세로 화면이면 LP/가사/대기열 전환).
   /// 가로 화면은 LP를 제목 왼쪽에 둔다 — 세로로 쌓으면 휴대폰 가로 높이(약 400dp)에서 LP 자리가 남지 않았다(FN-19 실기기에서 발견)
   Widget _controls(BuildContext context, PlayerPort p, Track t, PlayQueue q, Widget top, {required bool showPanes, bool landscape = false}) {
     final c = context.colors;
+    final g = context.glass;
     final status = <Widget>[
-            if (p.errorMessage.value != null)
-              Padding(
-                padding: const EdgeInsets.all(Space.sm),
-                // 사유와 "다음 곡" (04장 S8 오류). 자동으로 넘어가기 전 3초 동안 보인다
-                child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: Space.sm, children: [
-                  Icon(Icons.error_outline, color: c.danger),
-                  Text(p.errorMessage.value!, style: TextStyle(color: c.danger)),
-                  TextButton(onPressed: p.skipToNext, child: const Text('다음 곡')),
-                ]),
-              )
-            else if (p.nowSource.value.preparing)
-              // 변환 대기 (04장 S8 로딩)
-              Padding(
-                padding: const EdgeInsets.all(Space.sm),
-                child: Text('서버에서 재생용 파일을 준비 중입니다', textAlign: TextAlign.center, style: TextStyle(color: c.textMuted)),
-              ),
+      if (p.errorMessage.value != null)
+        Padding(
+          padding: const EdgeInsets.all(Space.sm),
+          // 사유와 "다음 곡" (04장 S8 오류). 자동으로 넘어가기 전 3초 동안 보인다
+          child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: Space.sm, children: [
+            Icon(Icons.error_outline, color: c.danger),
+            Text(p.errorMessage.value!, style: TextStyle(color: g.onGlass)),
+            TextButton(onPressed: p.skipToNext, child: const Text('다음 곡')),
+          ]),
+        )
+      else if (p.nowSource.value.preparing)
+        // 변환 대기 (04장 S8 로딩)
+        Padding(
+          padding: const EdgeInsets.all(Space.sm),
+          child: Text('서버에서 재생용 파일을 준비 중입니다', textAlign: TextAlign.center, style: TextStyle(color: g.onGlassMuted)),
+        ),
     ];
     final info = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Row(children: [
-                      Flexible(child: Text(t.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.displaySmall?.copyWith(fontSize: 22))),
-                      TrackDownloadMark(t.id),
-                    ]),
-                    Text(artistNames(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted)),
-                    if (p.nowSource.value.label.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(top: Space.xs),
-                        padding: const EdgeInsets.symmetric(horizontal: Space.sm, vertical: 2),
-                        decoration: BoxDecoration(color: c.surfaceAlt, borderRadius: BorderRadius.circular(Radii.sm)),
-                        child: Text(p.nowSource.value.label, style: context.text.bodySmall),
-                      ),
+      Row(children: [
+        Flexible(child: Text(t.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.displaySmall?.copyWith(fontSize: 24, height: 1.25))),
+        TrackDownloadMark(t.id),
+      ]),
+      const SizedBox(height: 2),
+      Text(artistNames(t), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: g.onGlassMuted, fontSize: 17)),
+      if (p.nowSource.value.label.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: Space.sm),
+          child: Glass(
+            kind: GlassKind.thin,
+            circle: true,
+            padding: const EdgeInsets.symmetric(horizontal: Space.md, vertical: 3),
+            child: Text(p.nowSource.value.label, style: context.text.bodySmall?.copyWith(color: g.onGlass, fontWeight: FontWeight.w600)),
+          ),
+        ),
+    ]);
+    final controls = Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+      IconButton(
+        onPressed: () => p.setShuffle(!q.shuffle),
+        icon: Icon(Icons.shuffle_rounded, color: q.shuffle ? c.accent : g.onGlassMuted),
+        tooltip: q.shuffle ? '셔플 끄기' : '셔플 켜기',
+      ),
+      IconButton(onPressed: p.skipToPrevious, icon: Icon(Icons.skip_previous_rounded, size: 40, color: g.onGlass), tooltip: '이전 곡'),
+      _BigPlayButton(p),
+      IconButton(onPressed: p.skipToNext, icon: Icon(Icons.skip_next_rounded, size: 40, color: g.onGlass), tooltip: '다음 곡'),
+      IconButton(
+        onPressed: p.cycleRepeat,
+        icon: Icon(q.repeat == RepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded, color: q.repeat == RepeatMode.off ? g.onGlassMuted : c.accent),
+        tooltip: switch (q.repeat) { RepeatMode.off => '반복 꺼짐', RepeatMode.all => '전체 반복', RepeatMode.one => '한 곡 반복' },
+      ),
     ]);
     return Column(children: [
-            if (landscape)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 0),
-                  child: Row(children: [
-                    top,
-                    const SizedBox(width: Space.lg),
-                    Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [info, ...status])),
-                  ]),
-                ),
-              )
-            else ...[
-              Expanded(child: top),
-              ...status,
-              Padding(padding: const EdgeInsets.symmetric(horizontal: Space.xl), child: Row(children: [Expanded(child: info)])),
-            ],
-            _SeekBar(player: p, durationMs: t.durationMs),
-            // 재생 제어 줄은 세 구획에서 항상 같은 자리 (04장 S8)
-            Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-              IconButton(
-                onPressed: () => p.setShuffle(!q.shuffle),
-                icon: Icon(Icons.shuffle, color: q.shuffle ? c.accent : null),
-                tooltip: q.shuffle ? '셔플 끄기' : '셔플 켜기',
-              ),
-              IconButton(onPressed: p.skipToPrevious, icon: const Icon(Icons.skip_previous, size: 36), tooltip: '이전 곡'),
-              _PlayButton(p, size: 40, filled: true),
-              IconButton(onPressed: p.skipToNext, icon: const Icon(Icons.skip_next, size: 36), tooltip: '다음 곡'),
-              IconButton(
-                onPressed: p.cycleRepeat,
-                icon: Icon(q.repeat == RepeatMode.one ? Icons.repeat_one : Icons.repeat, color: q.repeat == RepeatMode.off ? null : c.accent),
-                tooltip: switch (q.repeat) { RepeatMode.off => '반복 꺼짐', RepeatMode.all => '전체 반복', RepeatMode.one => '한 곡 반복' },
-              ),
+      if (landscape)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 0),
+            child: Row(children: [
+              top,
+              const SizedBox(width: Space.lg),
+              Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [info, ...status])),
             ]),
-            if (showPanes)
-              Padding(
-                padding: const EdgeInsets.all(Space.md),
-                child: SegmentedButton<int>(
-                  segments: const [ButtonSegment(value: 0, label: Text('LP')), ButtonSegment(value: 1, label: Text('가사')), ButtonSegment(value: 2, label: Text('대기열'))],
-                  selected: {_pane},
-                  onSelectionChanged: (s) => setState(() => _pane = s.first),
-                  showSelectedIcon: false,
+          ),
+        )
+      else ...[
+        Expanded(child: top),
+        ...status,
+        Padding(padding: const EdgeInsets.fromLTRB(Space.xl, Space.sm, Space.xl, 0), child: Row(children: [Expanded(child: info)])),
+      ],
+      const SizedBox(height: Space.sm),
+      _SeekBar(player: p, durationMs: t.durationMs),
+      // 재생 제어 줄은 세 구획에서 항상 같은 자리 (04장 S8)
+      controls,
+      if (showPanes)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.xxl, Space.md, Space.xxl, Space.md),
+          child: GlassSegmented(labels: const ['LP', '가사', '대기열'], selected: _pane, onSelect: (v) => setState(() => _pane = v)),
+        )
+      else
+        const SizedBox(height: Space.md),
+    ]);
+  }
+}
+
+/// 몰입 화면 재생 버튼: 큰 유리 원
+class _BigPlayButton extends StatelessWidget {
+  const _BigPlayButton(this.p);
+  final PlayerPort p;
+
+  @override
+  Widget build(BuildContext context) {
+    final st = p.status.value;
+    if (st == PlaybackStatus.loading || st == PlaybackStatus.buffering) {
+      return const SizedBox(width: 76, height: 76, child: Padding(padding: EdgeInsets.all(22), child: CircularProgressIndicator(strokeWidth: 3, semanticsLabel: '불러오는 중')));
+    }
+    final playing = st == PlaybackStatus.playing;
+    return GlassIconButton(
+      icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+      onPressed: playing ? p.pause : p.play,
+      tooltip: playing ? '일시정지' : '재생',
+      size: 76,
+      iconSize: 42,
+    );
+  }
+}
+
+/// 몰입 화면 배경: 표지를 크게 흐리고 가림막을 깐다. 가림막 세기는 표지 밝기로 정해 글자 대비를 지킨다(04장 §3.4).
+/// 표지가 없거나 투명도 줄이기면 배경 덩어리/단색
+class _ArtBackdrop extends StatefulWidget {
+  const _ArtBackdrop({required this.track});
+  final Track track;
+  @override
+  State<_ArtBackdrop> createState() => _ArtBackdropState();
+}
+
+class _ArtBackdropState extends State<_ArtBackdrop> {
+  Future<File?>? _file;
+  String? _for;
+  bool _loaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_ArtBackdrop old) {
+    super.didUpdateWidget(old);
+    _load();
+  }
+
+  void _load() {
+    if (_loaded && _for == widget.track.artworkId) return;
+    _loaded = true;
+    _for = widget.track.artworkId;
+    _file = widget.track.artworkId == null ? Future.value(null) : context.readApp().player.cachedArtwork(widget.track.artworkId, 256);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watchApp();
+    if (context.glassOff) return ColoredBox(color: context.colors.bg);
+    final scrim = scrimFor(app.ambient.luma ?? 0.2);
+    return FutureBuilder<File?>(
+      future: _file,
+      builder: (context, s) {
+        final f = s.data;
+        final art = f == null
+            ? const AmbientBackdrop(child: SizedBox.expand())
+            : RepaintBoundary(
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 60, sigmaY: 60, tileMode: TileMode.mirror),
+                  child: Transform.scale(scale: 1.4, child: Image.file(f, fit: BoxFit.cover, width: double.infinity, height: double.infinity, gaplessPlayback: true)),
                 ),
-              ),
-          ]);
+              );
+        return Stack(fit: StackFit.expand, children: [
+          ColoredBox(color: context.colors.bg),
+          AnimatedSwitcher(duration: context.reduceMotion ? Duration.zero : Motion.slow, child: KeyedSubtree(key: ValueKey(f?.path), child: art)),
+          ColoredBox(color: Colors.black.withValues(alpha: f == null ? 0.25 : scrim)),
+          // 아래쪽(글자·조작부)을 조금 더 어둡게
+          const DecoratedBox(
+            decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.center, end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0x40000000)])),
+          ),
+        ]);
+      },
+    );
   }
 }
 
@@ -395,9 +516,30 @@ class _LpDiscState extends State<_LpDisc> with SingleTickerProviderStateMixin {
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(colors: [Color(0xFF2A2A2A), Color(0xFF0A0A0A), Color(0xFF1C1C1C), Color(0xFF050505)], stops: [0.3, 0.55, 0.8, 1]),
+                boxShadow: [BoxShadow(color: Color(0x80000000), blurRadius: 40, offset: Offset(0, 16))],
               ),
               alignment: Alignment.center,
-              child: ClipOval(child: Artwork(widget.track.artworkId, size: size * 0.38, radius: size, label: widget.track.title)),
+              child: CustomPaint(
+                painter: _GroovePainter(),
+                child: SizedBox(
+                  width: size, height: size,
+                  child: Center(child: ClipOval(child: Artwork(widget.track.artworkId, size: size * 0.38, radius: size, label: widget.track.title))),
+                ),
+              ),
+            ),
+          ),
+          // 고정된 빛 반사(회전하지 않음) — 유리 같은 광택 (04장 §3.4)
+          IgnorePointer(
+            child: Container(
+              width: size, height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0x33FFFFFF)),
+                gradient: const SweepGradient(
+                  colors: [Color(0x00FFFFFF), Color(0x1FFFFFFF), Color(0x00FFFFFF), Color(0x00FFFFFF), Color(0x14FFFFFF), Color(0x00FFFFFF)],
+                  stops: [0.0, 0.12, 0.25, 0.5, 0.62, 0.75],
+                ),
+              ),
             ),
           ),
           if (p.status.value == PlaybackStatus.loading || p.status.value == PlaybackStatus.buffering)
@@ -406,6 +548,25 @@ class _LpDiscState extends State<_LpDisc> with SingleTickerProviderStateMixin {
       ),
     );
   }
+}
+
+/// LP 홈 무늬: 가는 동심원
+class _GroovePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.6;
+    for (var f = 0.24; f < 0.97; f += 0.022) {
+      paint.color = Color.fromARGB(f * 1000 % 3 < 1.5 ? 26 : 14, 255, 255, 255);
+      canvas.drawCircle(c, r * f, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GroovePainter old) => false;
 }
 
 /// 3단 가사 (04장 S8 가사, LyricLine)
@@ -572,7 +733,15 @@ class _LyricsPaneState extends State<_LyricsPane> {
               // 가사 글자 크기 보정 (04장 S10): 시스템 글자 배율에 곱한다. 가사에만 적용
               child: MediaQuery(
                 data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(context.textScale * context.watchApp().prefs.lyricsScale)),
-                child: ListView.builder(
+                // 위·아래 가장자리에서 가사가 서서히 사라진다 (04장 §3.4) — 제목·조작부와 겹쳐 보이지 않게
+                child: ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (r) => const LinearGradient(
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xFF000000), Color(0xFF000000), Color(0x00000000)],
+                    stops: [0, 0.08, 0.88, 1],
+                  ).createShader(r),
+                  child: ListView.builder(
                 controller: _scroll,
                 padding: const EdgeInsets.symmetric(horizontal: Space.xl, vertical: Space.xxl),
                 itemCount: lyrics.rows.length + 1,
@@ -597,6 +766,7 @@ class _LyricsPaneState extends State<_LyricsPane> {
                     ),
                   );
                 },
+              ),
               ),
               ),
             ),

@@ -119,6 +119,8 @@ void main() {
     testWidgets('⋮ → 다음에 재생', (t) async {
       final (_, player, _) = await pumpApp(t, const AlbumScreen(albumId: 'alb_1', title: '첫 앨범'), server: albumServer());
       await scrollTo(t, find.text('첫 곡'));
+      await t.ensureVisible(find.byTooltip('더 보기').first); // 표지 그림자 여유만큼 머리글이 커져 버튼이 화면 끝에 걸린다
+      await t.pumpAndSettle();
       await t.tap(find.byTooltip('더 보기').first);
       await t.pumpAndSettle();
       await t.tap(find.text('다음에 재생'));
@@ -234,7 +236,9 @@ void main() {
 
     testWidgets('몰입 화면: 셔플·반복 버튼, 대기열 구획', (t) async {
       final player = await withQueue(t, const NowPlayingScreen());
-      expect(find.textContaining('첫 앨범 에서 재생 중'), findsOneWidget);
+      // 머리글: "재생 중" + 맥락 이름 (04장 §3.4 몰입 화면)
+      expect(find.text('재생 중'), findsOneWidget);
+      expect(find.text('첫 앨범'), findsOneWidget);
       await t.tap(find.byTooltip('셔플 켜기'));
       await t.pump();
       expect(player.calls.last, 'shuffle true');

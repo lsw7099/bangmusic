@@ -1,4 +1,5 @@
 // 탭 동작 (04장 §2, P5): 루트에서 탭을 다시 누르면 맨 위로, 검색 탭은 검색창 초점, 마지막 탭 복원
+import 'package:bangmusic/ui/glass.dart';
 import 'package:bangmusic/ui/shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,7 @@ FakeServer longHome() => FakeServer()
   ..json('GET /albums', page([for (var i = 0; i < 30; i++) album('alb_$i', '앨범 $i')]));
 
 /// 탭 막대(좁은 화면) 또는 레일(폭 600dp 이상)의 탭 — 화면 제목과 이름이 같아서
-Finder tab(String label) => find.descendant(of: find.byWidgetPredicate((w) => w is NavigationBar || w is NavigationRail), matching: find.text(label));
+Finder tab(String label) => find.descendant(of: find.byWidgetPredicate((w) => w is GlassTabBar || w is NavigationRail), matching: find.text(label));
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));

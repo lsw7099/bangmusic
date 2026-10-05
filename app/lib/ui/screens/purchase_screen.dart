@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../platform/store_port.dart';
 import '../app_state.dart';
+import '../glass.dart';
 import '../scope.dart';
 import '../tokens.dart';
 
@@ -49,8 +50,8 @@ class _PurchaseScreenState extends State<PurchaseScreen> {
     final offline = app.connection == Connection.deviceOffline;
     final c = context.colors;
     final state = app.entitlement.state;
-    return Scaffold(
-      appBar: AppBar(title: const Text('구매 · 복원')),
+    return GlassScaffold(
+      appBar: GlassAppBar(title: const Text('구매 · 복원')),
       body: FutureBuilder<StoreProduct?>(
         future: _f,
         builder: (context, s) {

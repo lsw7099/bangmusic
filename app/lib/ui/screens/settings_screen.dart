@@ -16,6 +16,7 @@ import '../../core/app_info.dart';
 import '../../core/session.dart';
 import '../app_prefs.dart';
 import '../app_state.dart';
+import '../glass.dart';
 import '../scope.dart';
 import '../tokens.dart';
 import '../widgets/common.dart';
@@ -41,9 +42,9 @@ class SettingsScreen extends StatelessWidget {
     // 서버가 필요한 항목은 서버에 닿을 때만 (로컬 DB 유무와 무관)
     final online = app.connection == Connection.online && !app.serverChanged;
     final others = [for (final x in app.profiles) if (x.serverId != p?.serverId) x];
-    return Scaffold(
-      appBar: AppBar(title: const Text('설정')),
-      body: ListView(children: [
+    return GlassScaffold(
+      appBar: GlassAppBar(title: const Text('설정')),
+      body: ListView(children: glassGroups([
         // ── 서버
         const _Title('서버'),
         if (app.session == SessionStatus.expired)
@@ -216,6 +217,14 @@ class SettingsScreen extends StatelessWidget {
           label: (v) => switch (v) { 'light' => '라이트', 'dark' => '다크', _ => '시스템 설정 따름' },
           onChanged: (v) => prefs.update(themeMode: ThemeMode.values.byName(v)),
         ),
+        // 04장 §3.4: 유리 대신 불투명 면, 흐림 없음 (읽기 쉬움·저사양 기기)
+        SwitchListTile(
+          secondary: const Icon(Icons.blur_off),
+          title: const Text('투명도 줄이기'),
+          subtitle: const Text('유리 효과 대신 불투명한 면을 씁니다'),
+          value: prefs.reduceTransparency,
+          onChanged: (v) => prefs.update(reduceTransparency: v),
+        ),
 
         // ── 개인정보
         const _Title('개인정보'),
@@ -273,7 +282,7 @@ class SettingsScreen extends StatelessWidget {
           },
         ),
         const SizedBox(height: Space.xxl),
-      ]),
+      ], (w) => w is _Title)),
     );
   }
 
@@ -546,8 +555,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
   @override
   Widget build(BuildContext context) {
     final api = context.readApp().api!;
-    return Scaffold(
-      appBar: AppBar(title: const Text('내 기기 세션')),
+    return GlassScaffold(
+      appBar: GlassAppBar(title: const Text('내 기기 세션')),
       body: FutureBuilder<List<Session>>(
         future: _f,
         builder: (context, s) {

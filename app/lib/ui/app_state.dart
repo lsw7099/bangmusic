@@ -23,6 +23,7 @@ import '../platform/playback_engine.dart' show androidAccept;
 import '../platform/secure_store.dart';
 import '../platform/store_port.dart';
 import '../platform/transfer_port.dart';
+import 'ambient.dart';
 import 'app_prefs.dart';
 
 /// 기기 쪽 구성요소 (위젯 테스트에서는 없음 → 다운로드·오프라인 기능 없이 동작)
@@ -74,6 +75,9 @@ class AppState extends ChangeNotifier {
 
   /// 재생·가사·화면 설정 (기기 로컬)
   final prefs = AppPrefs();
+
+  /// 배경 덩어리 색 (04장 §3.4) — 재생 중인 곡의 표지에서
+  late final AmbientPalette ambient = AmbientPalette(player);
 
   static const _profilesKey = 'profiles';
   static const _activeKey = 'profile.active';

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../core/api_client.dart';
 import '../../core/app_info.dart';
 import '../../core/server_address.dart';
+import '../glass.dart';
 import '../scope.dart';
 import '../tokens.dart';
 import '../widgets/common.dart';
@@ -138,8 +139,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
     // 같은 주소인데 server_id가 다르다 (03장 §5.2): 이전 토큰은 보내지 않고 새 서버로 등록한다
     final replaced = server == null ? null : app.differentServerAt(server);
     final saved = [for (final p in app.profiles) if (p.serverId != app.profile?.serverId) p];
-    return Scaffold(
-      appBar: widget.asRoute ? AppBar(title: const Text('서버 추가')) : null,
+    return GlassScaffold(
+      appBar: widget.asRoute ? GlassAppBar(title: const Text('서버 추가')) : null,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(Space.xl),

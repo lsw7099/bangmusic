@@ -14,6 +14,7 @@ import '../../data/library_store.dart';
 import '../../domain/download_state.dart';
 import '../../domain/queue.dart';
 import '../app_state.dart';
+import '../glass.dart';
 import '../scope.dart';
 import '../tokens.dart';
 import '../widgets/common.dart';
@@ -234,9 +235,12 @@ class _TrackTile extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section(this.title, this.child, {this.onMore});
+  const _Section(this.title, this.child, {this.onMore, this.card = false});
   final String title;
   final Widget child;
+
+  /// 곡 목록 같은 세로 목록은 얇은 유리 카드에 담는다 (04장 §3.4)
+  final bool card;
 
   /// "모두 보기" (04장 S2·S4)
   final VoidCallback? onMore;
@@ -250,7 +254,13 @@ class _Section extends StatelessWidget {
             if (onMore != null) TextButton(onPressed: onMore, child: Text('$title 모두 보기')),
           ]),
         ),
-        child,
+        if (card)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.md),
+            child: Glass(kind: GlassKind.thin, radius: Radii.xl, padding: const EdgeInsets.symmetric(vertical: Space.sm), child: child),
+          )
+        else
+          child,
       ]);
 }
 
@@ -274,14 +284,20 @@ class _CoverCard extends StatelessWidget {
         width: width,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(Radii.md),
+          borderRadius: BorderRadius.circular(Radii.lg),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Stack(children: [
-              Artwork(artworkId, size: width, radius: width > 200 ? Radii.lg : Radii.md, label: title),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(width > 200 ? Radii.xl : Radii.lg),
+                  boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 18, offset: Offset(0, 8))],
+                ),
+                child: Artwork(artworkId, size: width, radius: width > 200 ? Radii.xl : Radii.lg, label: title),
+              ),
               if (onPlay != null)
                 Positioned(
-                  right: Space.sm, bottom: Space.sm,
-                  child: IconButton.filled(onPressed: onPlay, icon: const Icon(Icons.play_arrow), tooltip: '$title 재생', iconSize: 28),
+                  right: Space.md, bottom: Space.md,
+                  child: GlassIconButton(icon: const Icon(Icons.play_arrow_rounded), onPressed: onPlay, tooltip: '$title 재생', size: 52, iconSize: 30),
                 ),
             ]),
             const SizedBox(height: Space.sm),
@@ -328,8 +344,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final app = context.watchApp();
     final w = MediaQuery.sizeOf(context).width;
     final big = context.textScale >= 1.3;
-    return Scaffold(
-      appBar: AppBar(
+    return GlassScaffold(
+      appBar: GlassAppBar(
         title: Text(_greeting(app)),
         actions: [IconButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen())), icon: const Icon(Icons.account_circle_outlined), tooltip: '설정')],
       ),
@@ -355,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Card(
                     child: ListTile(
                       contentPadding: const EdgeInsets.all(Space.lg),
-                      leading: const Icon(Icons.playlist_add, size: 32),
+                      leading: Icon(Icons.playlist_add_rounded, size: 32, color: context.colors.accent),
                       title: const Text('첫 플레이리스트 만들기'),
                       subtitle: const Text('좋아하는 곡을 모아 두고 한 번에 받아 두세요.'),
                       onTap: () async {
@@ -400,7 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 )),
               if (h.topTracks.isNotEmpty)
-                _Section('많이 들은 곡', Column(children: [
+                _Section('많이 들은 곡', card: true, Column(children: [
                   for (var i = 0; i < h.topTracks.length && i < 5; i++)
                     _TrackTile(h.topTracks[i], () => playTracks(context, h.topTracks, i, const QueueContext(ContextType.adhoc, null, '많이 들은 곡')), number: i + 1),
                 ])),
@@ -449,7 +465,7 @@ class _OfflineHome extends StatelessWidget {
           }
           return ListView(children: [
             if (playlists.isNotEmpty)
-              _Section('플레이리스트', Column(children: [
+              _Section('플레이리스트', card: true, Column(children: [
                 for (final p in playlists)
                   ListTile(leading: Artwork(playlistCover(p), size: 48, label: p.name), title: Text(p.name),
                       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PlaylistScreen(playlist: p)))),
@@ -469,7 +485,7 @@ class _OfflineHome extends StatelessWidget {
                   },
                 ),
               )),
-            _Section('받은 곡 ${tracks.length}', Column(children: [
+            _Section('받은 곡 ${tracks.length}', card: true, Column(children: [
               for (var i = 0; i < tracks.length; i++) _TrackTile(tracks[i], () => playTracks(context, tracks, i, const QueueContext(ContextType.library, null, '받은 곡'))),
             ])),
             const SizedBox(height: Space.xxl),
@@ -496,9 +512,12 @@ class _GridCard extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
         builder: (context, box) => InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(Radii.md),
+            borderRadius: BorderRadius.circular(Radii.lg),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Artwork(artworkId, size: box.maxWidth, radius: Radii.md, label: title),
+              DecoratedBox(
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(Radii.lg), boxShadow: const [BoxShadow(color: Color(0x26000000), blurRadius: 14, offset: Offset(0, 6))]),
+                child: Artwork(artworkId, size: box.maxWidth, radius: Radii.lg, label: title),
+              ),
               const SizedBox(height: Space.sm),
               Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.titleSmall),
               Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.bodySmall?.copyWith(color: context.colors.textMuted)),
@@ -556,8 +575,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       actionLabel: '필터 끄기',
       action: () => setState(() => _downloadedOnly = false),
     );
-    return Scaffold(
-      appBar: AppBar(
+    return GlassScaffold(
+      appBar: GlassAppBar(
         title: const Text('라이브러리'),
         actions: [
           if (_kind == _Kind.tracks && !local)
@@ -799,8 +818,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 trailing: IconButton(onPressed: () => _forget(q), icon: const Icon(Icons.close), tooltip: '‘$q’ 지우기'),
               ),
           ]);
-    return Scaffold(
-      appBar: AppBar(
+    return GlassScaffold(
+      appBar: GlassAppBar(
         title: TextField(
           controller: _q,
           focusNode: _focus,
@@ -855,7 +874,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                   onTap: _then(() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ArtistScreen(artistId: ar.id, name: ar.name))))),
                           ]), onMore: offline ? null : () => _openAll('artist', '아티스트')),
                         if (r.playlists?.items.isNotEmpty ?? false)
-                          _Section('플레이리스트', Column(children: [
+                          _Section('플레이리스트', card: true, Column(children: [
                             for (final p in r.playlists!.items)
                               ListTile(leading: Artwork(playlistCover(p), size: 48, label: p.name), title: Text(p.name), subtitle: Text('${p.itemCount}곡'),
                                   onTap: _then(() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PlaylistScreen(playlist: p))))),
@@ -879,8 +898,8 @@ class SearchAllScreen extends StatelessWidget {
     final api = context.readApp().api!;
     Future<SearchResult> page(String? c) => api.call((a) => a.getCatalogApi().search(q: query, types: type, cursor: c, limit: 50));
     final ctx = QueueContext(ContextType.search, null, '‘$query’ 검색');
-    return Scaffold(
-      appBar: AppBar(title: Text('‘$query’ · $title')),
+    return GlassScaffold(
+      appBar: GlassAppBar(title: Text('‘$query’ · $title')),
       body: switch (type) {
         'track' => PagedList<Track>(
             load: (c) async => switch (await page(c)) { final r => (r.tracks?.items ?? <Track>[], r.tracks?.nextCursor) },
@@ -922,8 +941,8 @@ class ArtistScreen extends StatelessWidget {
     final app = context.watchApp();
     final api = app.api!;
     final off = app.offline && app.library != null;
-    return Scaffold(
-      appBar: AppBar(title: Text(name)),
+    return GlassScaffold(
+      appBar: GlassAppBar(title: Text(name)),
       body: PagedList<Album>(
         key: ValueKey('artist-$off'),
         load: (c) async {

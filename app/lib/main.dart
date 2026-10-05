@@ -38,8 +38,11 @@ class BangMusicApp extends StatelessWidget {
     }
     return MaterialApp(
       title: AppInfo.productName,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
+      theme: buildTheme(Brightness.light, glassOff: app.prefs.reduceTransparency),
+      darkTheme: buildTheme(Brightness.dark, glassOff: app.prefs.reduceTransparency),
+      // 시스템 고대비: 유리 대신 불투명 면 (04장 §3.4 투명도 줄이기)
+      highContrastTheme: buildTheme(Brightness.light, glassOff: true),
+      highContrastDarkTheme: buildTheme(Brightness.dark, glassOff: true),
       themeMode: app.prefs.themeMode, // 시스템/라이트/다크 (04장 S10)
       home: home,
     );

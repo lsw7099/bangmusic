@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
 import '../app_state.dart';
+import '../glass.dart';
 import '../screens/connect_screen.dart';
 import 'relogin_sheet.dart';
 import '../scope.dart';
@@ -257,15 +258,17 @@ class _SkeletonListState extends State<SkeletonList> {
 }
 
 /// 상태 배너 (04장 §4 StatusBanner, §5). 아이콘 + 문구를 함께 쓴다(색만으로 전달하지 않음).
+/// 화면 위쪽에 뜬 유리 알약(§3.4). 글자는 유리 위 본문색 — 뒤에 무엇이 비쳐도 대비 유지.
 class StatusBanner extends StatelessWidget {
   const StatusBanner({super.key});
 
-  @override
-  Widget build(BuildContext context) {
+  /// 지금 배너가 보이는지 (셸이 아래 화면의 위 여백을 정할 때)
+  static bool visible(BuildContext context) => _info(context) != null;
+
+  static (IconData, String, String?, VoidCallback?)? _info(BuildContext context) {
     final app = context.watchApp();
-    final c = context.colors;
     // 세션 만료가 우선, 그다음 오프라인 (03장 §6.8: 기기 오프라인과 서버 무응답을 다른 문구로)
-    final (IconData, String, String?, VoidCallback?)? b = switch ((app.session, app.connection)) {
+    return switch ((app.session, app.connection)) {
       // 서버가 바뀌었으면 가장 먼저 — 다시 로그인을 권하면 다른 서버에 비밀번호를 넣게 된다
       _ when app.serverChanged => (Icons.gpp_maybe, '이 주소의 서버가 이전과 다릅니다. 로그인 정보를 보내지 않았습니다 · 받은 음악만 재생', '새 서버로 등록',
           () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ConnectScreen(initialAddress: app.profile?.baseUrl, asRoute: true)))),
@@ -277,26 +280,31 @@ class StatusBanner extends StatelessWidget {
       (_, Connection.serverUnreachable) => (Icons.dns_outlined, '서버에 연결할 수 없습니다 · 받은 음악만 재생할 수 있습니다', '다시 시도', () => app.syncNow()),
       _ => null,
     };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final b = _info(context);
     if (b == null) return const SizedBox.shrink();
-    return Material(
-      color: c.accentSoft,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
-          child: Row(children: [
-            Icon(b.$1, color: c.text),
-            const SizedBox(width: Space.sm),
-            Expanded(child: Text(b.$2)),
-            // 강조 배경 위 강조색 글자는 라이트에서 4.07:1이라 기준 미달 → 본문색 + 굵게 (04장 §3.1, test/ui/contrast_test.dart)
-            if (b.$3 != null)
-              TextButton(
-                onPressed: b.$4,
-                style: TextButton.styleFrom(foregroundColor: c.text, textStyle: context.text.labelLarge?.copyWith(fontWeight: FontWeight.w700, decoration: TextDecoration.underline)),
-                child: Text(b.$3!),
-              ),
-          ]),
-        ),
+    final g = context.glass;
+    final top = MediaQuery.paddingOf(context).top;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(GlassTokens.float, top + Space.sm, GlassTokens.float, Space.xs),
+      child: Glass(
+        radius: Radii.lg,
+        padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.sm, Space.sm),
+        child: Row(children: [
+          Icon(b.$1, color: g.onGlass),
+          const SizedBox(width: Space.md),
+          Expanded(child: Text(b.$2, style: TextStyle(color: g.onGlass))),
+          // 동작 버튼: 본문색 + 굵게 + 밑줄 (강조색 글자는 배경에 따라 대비 미달 — 04장 §3.1)
+          if (b.$3 != null)
+            TextButton(
+              onPressed: b.$4,
+              style: TextButton.styleFrom(foregroundColor: g.onGlass, textStyle: context.text.labelLarge?.copyWith(fontWeight: FontWeight.w700, decoration: TextDecoration.underline)),
+              child: Text(b.$3!),
+            ),
+        ]),
       ),
     );
   }

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'ambient.dart';
+import 'glass.dart';
+import 'scope.dart';
 import 'screens/browse_screens.dart';
 import 'screens/download_screens.dart';
 import 'screens/player_screens.dart';
@@ -88,39 +91,82 @@ class _ShellState extends State<Shell> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 600;
-    final body = IndexedStack(
-      index: _tab,
-      children: [
-        for (var i = 0; i < 4; i++)
-          Navigator(key: _navs[i], onGenerateRoute: (_) => MaterialPageRoute<void>(builder: (_) => _root(i))),
-      ],
-    );
     // 다운로드 탭: 진행 중 개수 배지, 실패가 있으면 경고 점 (04장 §2)
     Widget icon(int i, bool selected) => i == 3 ? DownloadsTabIcon(selected: selected) : Icon(selected ? _tabs[i].$2 : _tabs[i].$1);
-    final dests = [for (var i = 0; i < _tabs.length; i++) NavigationDestination(icon: icon(i, false), selectedIcon: icon(i, true), label: _tabs[i].$3)];
+    final player = context.readApp().player;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) => didPop ? null : _back(),
-      child: Scaffold(
-        body: Column(children: [
-          const StatusBanner(),
-          Expanded(
-            child: wide
-                ? Row(children: [
-                    NavigationRail(
-                      selectedIndex: _tab,
-                      onDestinationSelected: _select,
-                      labelType: NavigationRailLabelType.all,
-                      destinations: [for (var i = 0; i < _tabs.length; i++) NavigationRailDestination(icon: icon(i, false), selectedIcon: icon(i, true), label: Text(_tabs[i].$3))],
-                    ),
-                    Expanded(child: body),
-                  ])
-                : body,
+      child: AmbientBackdrop(
+        child: Material(
+          type: MaterialType.transparency,
+          child: ListenableBuilder(
+            listenable: player.queueChanged,
+            builder: (context, _) {
+              final mq = MediaQuery.of(context);
+              final hasMini = player.currentTrack != null;
+              // 떠 있는 조작부(04장 §3.4): 탭 막대(+ 미니 플레이어)가 내용 위에 뜬다 → 그만큼 내용 아래 여백
+              final float = GlassTokens.float;
+              final cluster = (wide ? 0.0 : GlassTabBar.height + float) + (hasMini ? MiniPlayer.height + (wide ? float : Space.sm) : 0) + float;
+              final body = IndexedStack(
+                index: _tab,
+                children: [
+                  for (var i = 0; i < 4; i++)
+                    Navigator(key: _navs[i], onGenerateRoute: (_) => MaterialPageRoute<void>(builder: (_) => _root(i))),
+                ],
+              );
+              final content = Column(children: [
+                const StatusBanner(),
+                Expanded(
+                  child: Builder(builder: (context) {
+                    // 배너가 상태 표시줄 자리를 이미 썼으면 아래 화면은 위 여백을 다시 넣지 않는다
+                    final banner = StatusBanner.visible(context);
+                    return MediaQuery(
+                      data: mq.copyWith(padding: mq.padding.copyWith(top: banner ? 0 : mq.padding.top, bottom: mq.padding.bottom + cluster)),
+                      child: wide
+                          ? Row(children: [
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(float, (banner ? 0 : mq.padding.top) + float, 0, mq.padding.bottom + float),
+                                child: Glass(
+                                  kind: GlassKind.thin,
+                                  child: NavigationRail(
+                                    backgroundColor: Colors.transparent,
+                                    selectedIndex: _tab,
+                                    onDestinationSelected: _select,
+                                    labelType: NavigationRailLabelType.all,
+                                    indicatorColor: context.glassOff ? context.colors.accentSoft : context.glass.lens,
+                                    destinations: [for (var i = 0; i < _tabs.length; i++) NavigationRailDestination(icon: icon(i, false), selectedIcon: icon(i, true), label: Text(_tabs[i].$3))],
+                                  ),
+                                ),
+                              ),
+                              Expanded(child: body),
+                            ])
+                          : body,
+                    );
+                  }),
+                ),
+              ]);
+              return Stack(children: [
+                Positioned.fill(child: content),
+                Positioned(
+                  left: wide ? 120 : float,
+                  right: float,
+                  bottom: mq.padding.bottom + float,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    if (hasMini) const MiniPlayer(),
+                    if (hasMini && !wide) const SizedBox(height: Space.sm),
+                    if (!wide)
+                      GlassTabBar(
+                        selected: _tab,
+                        onSelect: _select,
+                        items: [for (var i = 0; i < _tabs.length; i++) (icon(i, false), icon(i, true), _tabs[i].$3)],
+                      ),
+                  ]),
+                ),
+              ]);
+            },
           ),
-          const MiniPlayer(),
-        ]),
-        bottomNavigationBar: wide ? null : NavigationBar(selectedIndex: _tab, onDestinationSelected: _select, destinations: dests, height: 64),
-        backgroundColor: context.colors.bg,
+        ),
       ),
     );
   }

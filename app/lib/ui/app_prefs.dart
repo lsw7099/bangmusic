@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppPrefs extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.system;
 
+  /// 투명도 줄이기 (04장 §3.4): 유리 대신 불투명 면, 흐림 없음
+  bool reduceTransparency = false;
+
   /// 스트리밍 음질: Wi-Fi / 셀룰러 (original, aac_256, aac_128)
   String streamQualityWifi = 'original';
   String streamQualityCellular = 'aac_128';
@@ -23,6 +26,7 @@ class AppPrefs extends ChangeNotifier {
   Future<void> load() async {
     final p = await SharedPreferences.getInstance();
     themeMode = ThemeMode.values.asNameMap()[p.getString('ui.theme')] ?? ThemeMode.system;
+    reduceTransparency = p.getBool('ui.reduce_transparency') ?? false;
     streamQualityWifi = p.getString('play.quality_wifi') ?? 'original';
     streamQualityCellular = p.getString('play.quality_cellular') ?? 'aac_128';
     allowCellularStreaming = p.getBool('play.allow_cellular') ?? true;
@@ -34,6 +38,7 @@ class AppPrefs extends ChangeNotifier {
 
   Future<void> update({
     ThemeMode? themeMode,
+    bool? reduceTransparency,
     String? streamQualityWifi,
     String? streamQualityCellular,
     bool? allowCellularStreaming,
@@ -43,6 +48,7 @@ class AppPrefs extends ChangeNotifier {
   }) async {
     final p = await SharedPreferences.getInstance();
     if (themeMode != null) await p.setString('ui.theme', (this.themeMode = themeMode).name);
+    if (reduceTransparency != null) await p.setBool('ui.reduce_transparency', this.reduceTransparency = reduceTransparency);
     if (streamQualityWifi != null) await p.setString('play.quality_wifi', this.streamQualityWifi = streamQualityWifi);
     if (streamQualityCellular != null) await p.setString('play.quality_cellular', this.streamQualityCellular = streamQualityCellular);
     if (allowCellularStreaming != null) await p.setBool('play.allow_cellular', this.allowCellularStreaming = allowCellularStreaming);

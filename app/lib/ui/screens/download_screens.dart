@@ -6,6 +6,7 @@ import '../../data/download_engine.dart';
 import '../../data/library_store.dart';
 import '../../domain/download_state.dart';
 import '../../domain/queue.dart';
+import '../glass.dart';
 import '../scope.dart';
 import '../tokens.dart';
 import '../widgets/common.dart';
@@ -246,7 +247,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final app = context.watchApp();
     final engine = app.downloads;
     if (engine == null) {
-      return const Scaffold(body: EmptyState(title: '다운로드', message: '이 환경에서는 다운로드를 쓸 수 없습니다.', icon: Icons.download_outlined));
+      return const GlassScaffold(body: EmptyState(title: '다운로드', message: '이 환경에서는 다운로드를 쓸 수 없습니다.', icon: Icons.download_outlined));
     }
     return ValueListenableBuilder<List<Download>>(
       valueListenable: engine.rows,
@@ -263,8 +264,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           done = done.reversed.toList();
         }
         final selecting = _selected.isNotEmpty;
-        return Scaffold(
-          appBar: AppBar(
+        return GlassScaffold(
+          appBar: GlassAppBar(
             title: Text(selecting ? '${_selected.length}개 선택' : '다운로드'),
             leading: selecting ? IconButton(onPressed: () => setState(_selected.clear), icon: const Icon(Icons.close), tooltip: '선택 취소') : null,
             actions: [
@@ -285,7 +286,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   message: '앨범이나 플레이리스트에서 다운로드 버튼을 누르세요',
                   icon: Icons.download_outlined,
                 )
-              : ListView(children: [
+              : ListView(children: glassGroups([
                   // 사용량은 목록에서 바로 센다(완료될 때마다 갱신). 기기 여유만 따로 묻는다
                   _SpaceBar(
                     space: (used: rows.where((d) => d.state == DlState.completed).fold<int>(0, (s, d) => s + (d.bytesTotal ?? 0)), free: _space?.free),
@@ -313,7 +314,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     for (final d in done) _row(context, engine, d, selectable: true),
                   ],
                   const SizedBox(height: Space.xxl),
-                ]),
+                ], (w) => w is _Header || w is _SpaceBar)),
         );
       },
     );

@@ -28,11 +28,11 @@ class _DetailScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
     final cover = min(w * 0.6, 320.0);
-    return Scaffold(
+    return GlassScaffold(
       body: CustomScrollView(slivers: [
         SliverAppBar(
           pinned: true,
-          expandedHeight: cover + kToolbarHeight + Space.lg,
+          expandedHeight: cover + kToolbarHeight + Space.lg + Space.xl, // 표지 그림자가 잘리지 않게 아래 여유
           title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
           actions: [
             if (onPlay != null) IconButton(onPressed: onPlay, icon: const Icon(Icons.play_circle_fill), tooltip: '$title 재생'),
@@ -42,8 +42,13 @@ class _DetailScaffold extends StatelessWidget {
           flexibleSpace: FlexibleSpaceBar(
             background: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.only(top: kToolbarHeight),
-                child: Center(child: Artwork(artworkId, size: cover, radius: Radii.lg, label: title)),
+                padding: const EdgeInsets.only(top: kToolbarHeight, bottom: Space.xl),
+                child: Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(Radii.xl), boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 32, offset: Offset(0, 14))]),
+                    child: Artwork(artworkId, size: cover, radius: Radii.xl, label: title),
+                  ),
+                ),
               ),
             ),
           ),
@@ -66,7 +71,6 @@ class _DetailScaffold extends StatelessWidget {
             ]),
           ),
         ),
-        const SliverToBoxAdapter(child: Divider(height: 1)),
         ...slivers,
         const SliverToBoxAdapter(child: SizedBox(height: Space.xxl)),
       ]),
@@ -95,7 +99,7 @@ Widget _loadError(BuildContext context, String title, Object error, VoidCallback
   final body = ae.status == 404
       ? EmptyState(title: '삭제되었거나 접근할 수 없습니다', icon: Icons.link_off, actionLabel: '뒤로', action: () => Navigator.of(context).maybePop())
       : ErrorState(error: error, onRetry: retry);
-  return Scaffold(appBar: AppBar(title: Text(title)), body: body);
+  return GlassScaffold(appBar: GlassAppBar(title: Text(title)), body: body);
 }
 
 // ── S5 앨범 ──────────────────────────────────────────────────────
@@ -162,7 +166,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
   Widget build(BuildContext context) {
     final a = _a;
     if (a == null && _error != null) return _loadError(context, widget.title, _error!, _load);
-    if (a == null) return Scaffold(appBar: AppBar(title: Text(widget.title)), body: const SkeletonList());
+    if (a == null) return GlassScaffold(appBar: GlassAppBar(title: Text(widget.title)), body: const SkeletonList());
     final app = context.watchApp();
     final ctx = QueueContext(ContextType.album, a.id, a.title);
     final available = [for (final t in a.tracks) if (t.state == TrackStateEnum.available) t];
@@ -177,9 +181,11 @@ class _AlbumScreenState extends State<AlbumScreen> {
       // 세션 만료면 다운로드 버튼 비활성 (04장 S5)
       extra: [if (app.session != SessionStatus.expired) GroupDownloadButton(kind: RequestKind.album, refId: a.id, trackIds: [for (final t in available) t.id])],
       slivers: [
-        SliverList.builder(
-          itemCount: a.tracks.length,
-          itemBuilder: (context, i) => _TrackTile(a.tracks[i], () => playTracks(context, a.tracks, i, ctx), number: a.tracks[i].trackNo ?? i + 1),
+        GlassSliverCard(
+          sliver: SliverList.builder(
+            itemCount: a.tracks.length,
+            itemBuilder: (context, i) => _TrackTile(a.tracks[i], () => playTracks(context, a.tracks, i, ctx), number: a.tracks[i].trackNo ?? i + 1),
+          ),
         ),
       ],
     );
